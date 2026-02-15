@@ -13,6 +13,7 @@ import {
   Platform,
 } from 'react-native';
 import * as SQLite from 'expo-sqlite';
+import { Ionicons } from '@expo/vector-icons';
 
 // Otevření databáze
 const db = SQLite.openDatabaseSync('artworks.db');
@@ -64,7 +65,11 @@ export default function App() {
   });
   const [currentYearDiff, setCurrentYearDiff] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [showUserAnswers, setShowUserAnswers] = useState(false);
+  const [showUserAnswers, setShowUserAnswers] = useState({
+    title: false,
+    author: false,
+    year: false,
+  });
 
   // Inicializace databáze
   useEffect(() => {
@@ -139,7 +144,7 @@ export default function App() {
         setYearInput('');
         setShowAnswer(false);
         setCurrentYearDiff(null);
-        setShowUserAnswers(false);
+        setShowUserAnswers({ title: false, author: false, year: false });
       } else {
         // Žádné další obrázky
         showResults();
@@ -155,18 +160,27 @@ export default function App() {
 
     let newScores = { ...scores };
     let yearDiff = null;
+    let newShowUserAnswers = { title: false, author: false, year: false };
 
     // Vyhodnocení title - alespoň 1 slovo (min 3 znaky) se musí shodovat
     if (selectedCategories.title) {
-      if (titleInput.trim() && wordsMatch(titleInput.trim(), currentArtwork.title)) {
+      const isCorrect = titleInput.trim() && wordsMatch(titleInput.trim(), currentArtwork.title);
+      if (isCorrect) {
         newScores.titles += 1;
+        newShowUserAnswers.title = false; // Správná = sbaleno
+      } else {
+        newShowUserAnswers.title = true; // Špatná = rozbaleno
       }
     }
 
     // Vyhodnocení author - alespoň 1 slovo (min 3 znaky) se musí shodovat
     if (selectedCategories.author) {
-      if (authorInput.trim() && wordsMatch(authorInput.trim(), currentArtwork.author)) {
+      const isCorrect = authorInput.trim() && wordsMatch(authorInput.trim(), currentArtwork.author);
+      if (isCorrect) {
         newScores.authors += 1;
+        newShowUserAnswers.author = false; // Správná = sbaleno
+      } else {
+        newShowUserAnswers.author = true; // Špatná = rozbaleno
       }
     }
 
@@ -177,24 +191,29 @@ export default function App() {
         // Penalizace za nevyplnění nebo neplatné číslo
         newScores.years += 500;
         yearDiff = 'penalty: +500';
+        newShowUserAnswers.year = true; // Špatná = rozbaleno
       } else {
         if (year < currentArtwork.year_start) {
           const diff = currentArtwork.year_start - year;
           newScores.years += diff;
           yearDiff = `+${diff}`;
+          newShowUserAnswers.year = true; // Špatná = rozbaleno
         } else if (year > currentArtwork.year_end) {
           const diff = year - currentArtwork.year_end;
           newScores.years += diff;
           yearDiff = `+${diff}`;
+          newShowUserAnswers.year = true; // Špatná = rozbaleno
         } else {
           // Rok je v rozmezí - nevypisovat nic
           yearDiff = null;
+          newShowUserAnswers.year = false; // Správná = sbaleno
         }
       }
     }
 
     setScores(newScores);
     setCurrentYearDiff(yearDiff);
+    setShowUserAnswers(newShowUserAnswers);
     setShowAnswer(true);
   };
 
@@ -341,12 +360,62 @@ export default function App() {
           keyboardShouldPersistTaps="handled"
         >
         <View style={styles.scoreHeader}>
-          <Text style={styles.scoreText}>
-            Round: {currentRound}/{selectedRounds}
-            {selectedCategories.title && ` | Titles: ${scores.titles}`}
-            {selectedCategories.author && ` | Authors: ${scores.authors}`}
-            {selectedCategories.year && ` | Year Diff: ${scores.years}`}
-          </Text>
+          <View style={styles.scoreRow}>
+            {/* Round */}
+            <Text style={styles.scoreText}>
+              {currentRound}/{selectedRounds}
+            </Text>
+            
+            {/* Title */}
+            {selectedCategories.title && (
+              <>
+                <View style={styles.scoreDivider} />
+                <Ionicons name="image-outline" size={18} color="#666" style={styles.scoreIcon} />
+                <Text style={[
+                  styles.scoreText,
+                  { color: 
+                    !showAnswer && currentRound === 1 ? '#333' : 
+                    scores.titles === currentRound ? '#4CAF50' : 
+                    scores.titles === 0 ? '#F44336' : '#333' 
+                  }
+                ]}>
+                  {scores.titles}
+                </Text>
+              </>
+            )}
+            
+            {/* Author */}
+            {selectedCategories.author && (
+              <>
+                <View style={styles.scoreDivider} />
+                <Ionicons name="person-outline" size={18} color="#666" style={styles.scoreIcon} />
+                <Text style={[
+                  styles.scoreText,
+                  { color: 
+                    !showAnswer && currentRound === 1 ? '#333' : 
+                    scores.authors === currentRound ? '#4CAF50' : 
+                    scores.authors === 0 ? '#F44336' : '#333' 
+                  }
+                ]}>
+                  {scores.authors}
+                </Text>
+              </>
+            )}
+            
+            {/* Year */}
+            {selectedCategories.year && (
+              <>
+                <View style={styles.scoreDivider} />
+                <Ionicons name="calendar-outline" size={18} color="#666" style={styles.scoreIcon} />
+                <Text style={[
+                  styles.scoreText,
+                  { color: scores.years === 0 ? '#4CAF50' : '#F44336' }
+                ]}>
+                  {scores.years}
+                </Text>
+              </>
+            )}
+          </View>
         </View>
 
         <Image
@@ -400,36 +469,108 @@ export default function App() {
           </View>
         ) : (
           <View style={styles.answerContainer}>
-            <Text style={styles.artworkTitle}>
-              {currentArtwork.title} ({currentArtwork.year_start === currentArtwork.year_end 
-                ? currentArtwork.year_start 
-                : `${currentArtwork.year_start}-${currentArtwork.year_end}`})
-            </Text>
-            <Text style={styles.artworkAuthor}>{currentArtwork.author}</Text>
-            
-            {currentYearDiff && (
-              <Text style={styles.yearError}>Your Year: {currentYearDiff}</Text>
+            {/* Title */}
+            {selectedCategories.title && (
+              <View style={styles.answerItem}>
+                <TouchableOpacity 
+                  style={styles.answerItemHeader}
+                  onPress={() => setShowUserAnswers(prev => ({ ...prev, title: !prev.title }))}
+                >
+                  <View style={styles.answerItemLeft}>
+                    <Ionicons name="image-outline" size={20} color="#666" style={styles.answerIcon} />
+                    <Text style={styles.answerItemText}>{currentArtwork.title}</Text>
+                  </View>
+                  <View style={styles.answerItemRight}>
+                    <Ionicons 
+                      name={titleInput.trim() && wordsMatch(titleInput.trim(), currentArtwork.title) 
+                        ? "checkmark-circle" 
+                        : "close-circle"
+                      } 
+                      size={20} 
+                      color={titleInput.trim() && wordsMatch(titleInput.trim(), currentArtwork.title) 
+                        ? "#4CAF50" 
+                        : "#F44336"
+                      } 
+                    />
+                    <Text style={styles.answerToggleIcon}>
+                      {showUserAnswers.title ? '▼' : '▶'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                {showUserAnswers.title && (
+                  <View style={styles.answerItemContent}>
+                    <Text style={styles.userAnswerText}>{titleInput || '-'}</Text>
+                  </View>
+                )}
+              </View>
             )}
 
-            <TouchableOpacity 
-              style={styles.userAnswersToggle}
-              onPress={() => setShowUserAnswers(!showUserAnswers)}
-            >
-              <Text style={styles.userAnswersTitle}>
-                Your Answers {showUserAnswers ? '▼' : '▶'}
-              </Text>
-            </TouchableOpacity>
+            {/* Author */}
+            {selectedCategories.author && (
+              <View style={styles.answerItem}>
+                <TouchableOpacity 
+                  style={styles.answerItemHeader}
+                  onPress={() => setShowUserAnswers(prev => ({ ...prev, author: !prev.author }))}
+                >
+                  <View style={styles.answerItemLeft}>
+                    <Ionicons name="person-outline" size={20} color="#666" style={styles.answerIcon} />
+                    <Text style={styles.answerItemText}>{currentArtwork.author}</Text>
+                  </View>
+                  <View style={styles.answerItemRight}>
+                    <Ionicons 
+                      name={authorInput.trim() && wordsMatch(authorInput.trim(), currentArtwork.author) 
+                        ? "checkmark-circle" 
+                        : "close-circle"
+                      } 
+                      size={20} 
+                      color={authorInput.trim() && wordsMatch(authorInput.trim(), currentArtwork.author) 
+                        ? "#4CAF50" 
+                        : "#F44336"
+                      } 
+                    />
+                    <Text style={styles.answerToggleIcon}>
+                      {showUserAnswers.author ? '▼' : '▶'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                {showUserAnswers.author && (
+                  <View style={styles.answerItemContent}>
+                    <Text style={styles.userAnswerText}>{authorInput || '-'}</Text>
+                  </View>
+                )}
+              </View>
+            )}
 
-            {showUserAnswers && (
-              <View style={styles.userAnswersContainer}>
-                {selectedCategories.title && (
-                  <Text style={styles.userAnswerText}>Title: {titleInput || ''}</Text>
-                )}
-                {selectedCategories.author && (
-                  <Text style={styles.userAnswerText}>Author: {authorInput || ''}</Text>
-                )}
-                {selectedCategories.year && (
-                  <Text style={styles.userAnswerText}>Year: {yearInput || ''}</Text>
+            {/* Year */}
+            {selectedCategories.year && (
+              <View style={styles.answerItem}>
+                <TouchableOpacity 
+                  style={styles.answerItemHeader}
+                  onPress={() => setShowUserAnswers(prev => ({ ...prev, year: !prev.year }))}
+                >
+                  <View style={styles.answerItemLeft}>
+                    <Ionicons name="calendar-outline" size={20} color="#666" style={styles.answerIcon} />
+                    <Text style={styles.answerItemText}>
+                      {currentArtwork.year_start === currentArtwork.year_end 
+                        ? currentArtwork.year_start 
+                        : `${currentArtwork.year_start}-${currentArtwork.year_end}`}
+                    </Text>
+                  </View>
+                  <View style={styles.answerItemRight}>
+                    {currentYearDiff ? (
+                      <Text style={styles.yearDiffText}>({currentYearDiff.replace('penalty: ', '')})</Text>
+                    ) : (
+                      <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
+                    )}
+                    <Text style={styles.answerToggleIcon}>
+                      {showUserAnswers.year ? '▼' : '▶'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                {showUserAnswers.year && (
+                  <View style={styles.answerItemContent}>
+                    <Text style={styles.userAnswerText}>{yearInput || '-'}</Text>
+                  </View>
                 )}
               </View>
             )}
@@ -592,7 +733,7 @@ const styles = StyleSheet.create({
     paddingBottom: 150,
   },
   label: {
-    fontSize: 18,
+    fontSize: 9,
     fontWeight: '600',
     marginTop: 10,
     marginBottom: 5,
@@ -622,46 +763,72 @@ const styles = StyleSheet.create({
   answerContainer: {
     paddingHorizontal: 20,
   },
-  artworkTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 10,
-    color: '#333',
+  scoreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
   },
-  artworkAuthor: {
-    fontSize: 20,
-    fontStyle: 'italic',
-    marginBottom: 10,
-    color: '#555',
-  },
-  yearError: {
-    fontSize: 18,
-    marginTop: 5,
-    marginBottom: 15,
-    color: '#F44336',
-    fontWeight: '600',
-  },
-  userAnswersToggle: {
+  scoreDivider: {
+    width: 1,
+    height: '100%',
     backgroundColor: '#E0E0E0',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 15,
+    marginHorizontal: 10,
+  },
+  scoreIcon: {
+    marginRight: 5,
+  },
+  answerItem: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
     marginBottom: 10,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
-  userAnswersTitle: {
+  answerItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 15,
+  },
+  answerItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  answerItemRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  answerIcon: {
+    marginRight: 10,
+  },
+  answerItemText: {
     fontSize: 16,
-    fontWeight: '600',
     color: '#333',
+    flex: 1,
   },
-  userAnswersContainer: {
+  answerToggleIcon: {
+    fontSize: 16,
+    color: '#666',
+    marginLeft: 10,
+  },
+  answerItemContent: {
     backgroundColor: '#F5F5F5',
     padding: 15,
-    borderRadius: 8,
-    marginBottom: 15,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+  },
+  yearDiffText: {
+    fontSize: 16,
+    color: '#F44336',
+    fontWeight: '600',
+    marginRight: 5,
   },
   userAnswerText: {
     fontSize: 16,
-    marginVertical: 3,
     color: '#666',
   },
   nextButton: {
