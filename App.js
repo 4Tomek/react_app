@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Modal,
 } from 'react-native';
 import * as SQLite from 'expo-sqlite';
 import { Ionicons } from '@expo/vector-icons';
@@ -70,6 +71,11 @@ export default function App() {
     author: false,
     year: false,
   });
+  const [imageZoomVisible, setImageZoomVisible] = useState(false);
+  
+  // Refs pro navigaci mezi poli
+  const authorInputRef = useRef(null);
+  const yearInputRef = useRef(null);
 
   // Inicializace databáze
   useEffect(() => {
@@ -418,49 +424,89 @@ export default function App() {
           </View>
         </View>
 
-        <Image
-          source={{ uri: currentArtwork.picture }}
-          style={styles.artworkImage}
-          resizeMode="contain"
-        />
+        <TouchableOpacity onPress={() => setImageZoomVisible(true)}>
+          <Image
+            source={{ uri: currentArtwork.picture }}
+            style={styles.artworkImage}
+            resizeMode="contain"
+          />
+        </TouchableOpacity>
+
+        {/* Modal pro přiblížení obrázku */}
+        <Modal
+          visible={imageZoomVisible}
+          transparent={true}
+          onRequestClose={() => setImageZoomVisible(false)}
+        >
+          <View style={styles.modalContainer}>
+            <TouchableOpacity 
+              style={styles.modalCloseButton}
+              onPress={() => setImageZoomVisible(false)}
+            >
+              <Ionicons name="close-circle" size={40} color="#fff" />
+            </TouchableOpacity>
+            <Image
+              source={{ uri: currentArtwork.picture }}
+              style={styles.zoomedImage}
+              resizeMode="contain"
+            />
+          </View>
+        </Modal>
 
         {!showAnswer ? (
           <View style={styles.inputContainer}>
             {selectedCategories.title && (
-              <>
-                <Text style={styles.label}>Title:</Text>
+              <View style={styles.inputRow}>
+                <Ionicons name="image-outline" size={24} color="#666" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   value={titleInput}
                   onChangeText={setTitleInput}
-                  placeholder="Zadej název díla"
+                  placeholder="Název díla"
+                  returnKeyType="next"
+                  onSubmitEditing={() => {
+                    if (selectedCategories.author && authorInputRef.current) {
+                      authorInputRef.current.focus();
+                    } else if (selectedCategories.year && yearInputRef.current) {
+                      yearInputRef.current.focus();
+                    }
+                  }}
                 />
-              </>
+              </View>
             )}
 
             {selectedCategories.author && (
-              <>
-                <Text style={styles.label}>Author:</Text>
+              <View style={styles.inputRow}>
+                <Ionicons name="person-outline" size={24} color="#666" style={styles.inputIcon} />
                 <TextInput
+                  ref={authorInputRef}
                   style={styles.input}
                   value={authorInput}
                   onChangeText={setAuthorInput}
-                  placeholder="Zadej autora"
+                  placeholder="Autor"
+                  returnKeyType="next"
+                  onSubmitEditing={() => {
+                    if (selectedCategories.year && yearInputRef.current) {
+                      yearInputRef.current.focus();
+                    }
+                  }}
                 />
-              </>
+              </View>
             )}
 
             {selectedCategories.year && (
-              <>
-                <Text style={styles.label}>Year:</Text>
+              <View style={styles.inputRow}>
+                <Ionicons name="calendar-outline" size={24} color="#666" style={styles.inputIcon} />
                 <TextInput
+                  ref={yearInputRef}
                   style={styles.input}
                   value={yearInput}
                   onChangeText={setYearInput}
-                  placeholder="Zadej rok"
+                  placeholder="Rok"
                   keyboardType="numeric"
+                  returnKeyType="done"
                 />
-              </>
+              </View>
             )}
 
             <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
@@ -723,23 +769,25 @@ const styles = StyleSheet.create({
   },
   artworkImage: {
     width: '90%',
-    height: 300,
+    height: 220,
     alignSelf: 'center',
-    marginBottom: 20,
+    marginBottom: 15,
     borderRadius: 10,
   },
   inputContainer: {
     paddingHorizontal: 20,
-    paddingBottom: 150,
+    paddingBottom: 100,
   },
-  label: {
-    fontSize: 9,
-    fontWeight: '600',
-    marginTop: 10,
-    marginBottom: 5,
-    color: '#333',
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  inputIcon: {
+    marginRight: 10,
   },
   input: {
+    flex: 1,
     backgroundColor: '#fff',
     paddingVertical: 12,
     paddingHorizontal: 15,
@@ -747,6 +795,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     borderWidth: 1,
     borderColor: '#ddd',
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalCloseButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 1,
+  },
+  zoomedImage: {
+    width: '95%',
+    height: '80%',
   },
   submitButton: {
     backgroundColor: '#2196F3',
@@ -766,7 +830,8 @@ const styles = StyleSheet.create({
   scoreRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-start',
+    justifyContent: 'space-between',
+    width: '100%',
   },
   scoreDivider: {
     width: 1,
