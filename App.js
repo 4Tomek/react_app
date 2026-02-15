@@ -9,11 +9,38 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import * as SQLite from 'expo-sqlite';
 
 // Otevření databáze
 const db = SQLite.openDatabaseSync('artworks.db');
+
+// Funkce pro odstranění diakritiky
+const removeDiacritics = (str) => {
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+};
+
+// Funkce pro porovnání slov (alespoň 1 slovo min 3 znaky se musí shodovat)
+const wordsMatch = (userAnswer, correctAnswer) => {
+  // Rozdělit na slova a filtrovat slova >= 3 znaky
+  const userWords = userAnswer
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(word => word.length >= 3);
+  
+  // Ze správné odpovědi odstranit diakritiku a rozdělit na slova >= 3 znaky
+  const correctWords = removeDiacritics(correctAnswer)
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(word => word.length >= 3);
+  
+  // Ověřit, zda se alespoň jedno slovo shoduje
+  return userWords.some(userWord => 
+    correctWords.some(correctWord => correctWord === userWord)
+  );
+};
 
 export default function App() {
   const [screen, setScreen] = useState('home'); // 'home', 'quiz', 'results'
@@ -117,13 +144,13 @@ export default function App() {
     let newScores = { ...scores };
     let yearDiff = null;
 
-    // Vyhodnocení title (case insensitive)
-    if (titleInput.trim().toLowerCase() === currentArtwork.title.toLowerCase()) {
+    // Vyhodnocení title - alespoň 1 slovo (min 3 znaky) se musí shodovat
+    if (titleInput.trim() && wordsMatch(titleInput.trim(), currentArtwork.title)) {
       newScores.titles += 1;
     }
 
-    // Vyhodnocení author (case insensitive)
-    if (authorInput.trim().toLowerCase() === currentArtwork.author.toLowerCase()) {
+    // Vyhodnocení author - alespoň 1 slovo (min 3 znaky) se musí shodovat
+    if (authorInput.trim() && wordsMatch(authorInput.trim(), currentArtwork.author)) {
       newScores.authors += 1;
     }
 
@@ -231,7 +258,16 @@ export default function App() {
   // Kvízová obrazovka
   if (screen === 'quiz' && currentArtwork) {
     return (
-      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardAvoidingView}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <ScrollView 
+          style={styles.container} 
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
         <View style={styles.scoreHeader}>
           <Text style={styles.scoreText}>
             Round: {currentRound}/{selectedRounds} | Titles: {scores.titles} | Authors: {scores.authors} | Year Diff: {scores.years}
@@ -311,6 +347,7 @@ export default function App() {
           </View>
         )}
       </ScrollView>
+      </KeyboardAvoidingView>
     );
   }
 
@@ -341,6 +378,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
     paddingTop: 50,
+  },
+  keyboardAvoidingView: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
   },
   scrollContent: {
     paddingBottom: 30,
