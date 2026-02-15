@@ -45,6 +45,11 @@ const wordsMatch = (userAnswer, correctAnswer) => {
 export default function App() {
   const [screen, setScreen] = useState('home'); // 'home', 'quiz', 'results'
   const [selectedRounds, setSelectedRounds] = useState(1);
+  const [selectedCategories, setSelectedCategories] = useState({
+    title: true,
+    author: true,
+    year: true,
+  });
   const [currentRound, setCurrentRound] = useState(1);
   const [currentArtwork, setCurrentArtwork] = useState(null);
   const [usedIds, setUsedIds] = useState([]);
@@ -65,6 +70,13 @@ export default function App() {
   useEffect(() => {
     initDatabase();
   }, []);
+
+  const toggleCategory = (category) => {
+    setSelectedCategories(prev => ({
+      ...prev,
+      [category]: !prev[category]
+    }));
+  };
 
   const initDatabase = async () => {
     try {
@@ -145,33 +157,39 @@ export default function App() {
     let yearDiff = null;
 
     // Vyhodnocení title - alespoň 1 slovo (min 3 znaky) se musí shodovat
-    if (titleInput.trim() && wordsMatch(titleInput.trim(), currentArtwork.title)) {
-      newScores.titles += 1;
+    if (selectedCategories.title) {
+      if (titleInput.trim() && wordsMatch(titleInput.trim(), currentArtwork.title)) {
+        newScores.titles += 1;
+      }
     }
 
     // Vyhodnocení author - alespoň 1 slovo (min 3 znaky) se musí shodovat
-    if (authorInput.trim() && wordsMatch(authorInput.trim(), currentArtwork.author)) {
-      newScores.authors += 1;
+    if (selectedCategories.author) {
+      if (authorInput.trim() && wordsMatch(authorInput.trim(), currentArtwork.author)) {
+        newScores.authors += 1;
+      }
     }
 
     // Vyhodnocení year
-    const year = parseInt(yearInput.trim());
-    if (yearInput.trim() === '' || isNaN(year)) {
-      // Penalizace za nevyplnění nebo neplatné číslo
-      newScores.years += 500;
-      yearDiff = 'penalty: +500';
-    } else {
-      if (year < currentArtwork.year_start) {
-        const diff = currentArtwork.year_start - year;
-        newScores.years += diff;
-        yearDiff = `+${diff}`;
-      } else if (year > currentArtwork.year_end) {
-        const diff = year - currentArtwork.year_end;
-        newScores.years += diff;
-        yearDiff = `+${diff}`;
+    if (selectedCategories.year) {
+      const year = parseInt(yearInput.trim());
+      if (yearInput.trim() === '' || isNaN(year)) {
+        // Penalizace za nevyplnění nebo neplatné číslo
+        newScores.years += 500;
+        yearDiff = 'penalty: +500';
       } else {
-        // Rok je v rozmezí - nevypisovat nic
-        yearDiff = null;
+        if (year < currentArtwork.year_start) {
+          const diff = currentArtwork.year_start - year;
+          newScores.years += diff;
+          yearDiff = `+${diff}`;
+        } else if (year > currentArtwork.year_end) {
+          const diff = year - currentArtwork.year_end;
+          newScores.years += diff;
+          yearDiff = `+${diff}`;
+        } else {
+          // Rok je v rozmezí - nevypisovat nic
+          yearDiff = null;
+        }
       }
     }
 
@@ -224,10 +242,64 @@ export default function App() {
     return (
       <View style={styles.container}>
         <Text style={styles.title}>Kvíz uměleckých děl</Text>
-        <Text style={styles.subtitle}>Vyber počet kol:</Text>
         
+        <Text style={styles.subtitle}>Vyber kategorie:</Text>
         <View style={styles.buttonGroup}>
-          {[1, 2, 3].map((num) => (
+          <TouchableOpacity
+            style={[
+              styles.categoryButton,
+              selectedCategories.title && styles.categoryButtonSelected,
+            ]}
+            onPress={() => toggleCategory('title')}
+          >
+            <Text
+              style={[
+                styles.categoryButtonText,
+                selectedCategories.title && styles.categoryButtonTextSelected,
+              ]}
+            >
+              Title
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[
+              styles.categoryButton,
+              selectedCategories.author && styles.categoryButtonSelected,
+            ]}
+            onPress={() => toggleCategory('author')}
+          >
+            <Text
+              style={[
+                styles.categoryButtonText,
+                selectedCategories.author && styles.categoryButtonTextSelected,
+              ]}
+            >
+              Author
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[
+              styles.categoryButton,
+              selectedCategories.year && styles.categoryButtonSelected,
+            ]}
+            onPress={() => toggleCategory('year')}
+          >
+            <Text
+              style={[
+                styles.categoryButtonText,
+                selectedCategories.year && styles.categoryButtonTextSelected,
+              ]}
+            >
+              Year
+            </Text>
+          </TouchableOpacity>
+        </View>
+        
+        <Text style={styles.subtitle}>Vyber počet kol:</Text>
+        <View style={styles.buttonGroup}>
+          {[1, 3, 7].map((num) => (
             <TouchableOpacity
               key={num}
               style={[
@@ -270,7 +342,10 @@ export default function App() {
         >
         <View style={styles.scoreHeader}>
           <Text style={styles.scoreText}>
-            Round: {currentRound}/{selectedRounds} | Titles: {scores.titles} | Authors: {scores.authors} | Year Diff: {scores.years}
+            Round: {currentRound}/{selectedRounds}
+            {selectedCategories.title && ` | Titles: ${scores.titles}`}
+            {selectedCategories.author && ` | Authors: ${scores.authors}`}
+            {selectedCategories.year && ` | Year Diff: ${scores.years}`}
           </Text>
         </View>
 
@@ -282,30 +357,42 @@ export default function App() {
 
         {!showAnswer ? (
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>Title:</Text>
-            <TextInput
-              style={styles.input}
-              value={titleInput}
-              onChangeText={setTitleInput}
-              placeholder="Zadej název díla"
-            />
+            {selectedCategories.title && (
+              <>
+                <Text style={styles.label}>Title:</Text>
+                <TextInput
+                  style={styles.input}
+                  value={titleInput}
+                  onChangeText={setTitleInput}
+                  placeholder="Zadej název díla"
+                />
+              </>
+            )}
 
-            <Text style={styles.label}>Author:</Text>
-            <TextInput
-              style={styles.input}
-              value={authorInput}
-              onChangeText={setAuthorInput}
-              placeholder="Zadej autora"
-            />
+            {selectedCategories.author && (
+              <>
+                <Text style={styles.label}>Author:</Text>
+                <TextInput
+                  style={styles.input}
+                  value={authorInput}
+                  onChangeText={setAuthorInput}
+                  placeholder="Zadej autora"
+                />
+              </>
+            )}
 
-            <Text style={styles.label}>Year:</Text>
-            <TextInput
-              style={styles.input}
-              value={yearInput}
-              onChangeText={setYearInput}
-              placeholder="Zadej rok"
-              keyboardType="numeric"
-            />
+            {selectedCategories.year && (
+              <>
+                <Text style={styles.label}>Year:</Text>
+                <TextInput
+                  style={styles.input}
+                  value={yearInput}
+                  onChangeText={setYearInput}
+                  placeholder="Zadej rok"
+                  keyboardType="numeric"
+                />
+              </>
+            )}
 
             <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
               <Text style={styles.submitButtonText}>SUBMIT</Text>
@@ -335,9 +422,15 @@ export default function App() {
 
             {showUserAnswers && (
               <View style={styles.userAnswersContainer}>
-                <Text style={styles.userAnswerText}>Title: {titleInput || ''}</Text>
-                <Text style={styles.userAnswerText}>Author: {authorInput || ''}</Text>
-                <Text style={styles.userAnswerText}>Year: {yearInput || ''}</Text>
+                {selectedCategories.title && (
+                  <Text style={styles.userAnswerText}>Title: {titleInput || ''}</Text>
+                )}
+                {selectedCategories.author && (
+                  <Text style={styles.userAnswerText}>Author: {authorInput || ''}</Text>
+                )}
+                {selectedCategories.year && (
+                  <Text style={styles.userAnswerText}>Year: {yearInput || ''}</Text>
+                )}
               </View>
             )}
 
@@ -358,9 +451,15 @@ export default function App() {
         <Text style={styles.resultsTitle}>Tvoje skóre:</Text>
         <View style={styles.resultsContainer}>
           <Text style={styles.resultsText}>Rounds: {selectedRounds}</Text>
-          <Text style={styles.resultsText}>Titles: {scores.titles}</Text>
-          <Text style={styles.resultsText}>Authors: {scores.authors}</Text>
-          <Text style={styles.resultsText}>Years: {scores.years}</Text>
+          {selectedCategories.title && (
+            <Text style={styles.resultsText}>Titles: {scores.titles}</Text>
+          )}
+          {selectedCategories.author && (
+            <Text style={styles.resultsText}>Authors: {scores.authors}</Text>
+          )}
+          {selectedCategories.year && (
+            <Text style={styles.resultsText}>Years: {scores.years}</Text>
+          )}
         </View>
 
         <TouchableOpacity style={styles.startButton} onPress={resetQuiz}>
@@ -431,6 +530,27 @@ const styles = StyleSheet.create({
   roundButtonTextSelected: {
     color: '#fff',
   },
+  categoryButton: {
+    backgroundColor: '#fff',
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    marginHorizontal: 5,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#ddd',
+  },
+  categoryButtonSelected: {
+    backgroundColor: '#4CAF50',
+    borderColor: '#4CAF50',
+  },
+  categoryButtonText: {
+    fontSize: 16,
+    color: '#333',
+    fontWeight: '600',
+  },
+  categoryButtonTextSelected: {
+    color: '#fff',
+  },
   startButton: {
     backgroundColor: '#4CAF50',
     paddingVertical: 15,
@@ -469,6 +589,7 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     paddingHorizontal: 20,
+    paddingBottom: 150,
   },
   label: {
     fontSize: 18,
