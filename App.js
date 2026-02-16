@@ -26,8 +26,8 @@ const removeDiacritics = (str) => {
 
 // Funkce pro porovnání slov (alespoň 1 slovo min 3 znaky se musí shodovat)
 const wordsMatch = (userAnswer, correctAnswer) => {
-  // Rozdělit na slova a filtrovat slova >= 3 znaky
-  const userWords = userAnswer
+  // Rozdělit na slova a filtrovat slova >= 3 znaky (odstranit diakritiku i z user inputu)
+  const userWords = removeDiacritics(userAnswer)
     .toLowerCase()
     .split(/\s+/)
     .filter(word => word.length >= 3);
@@ -72,6 +72,7 @@ export default function App() {
     year: false,
   });
   const [imageZoomVisible, setImageZoomVisible] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(1);
   
   // Refs pro navigaci mezi poli
   const authorInputRef = useRef(null);
@@ -110,9 +111,13 @@ export default function App() {
         // Vložení počátečních dat
         await db.runAsync(
           `INSERT INTO artworks (id, title, author, year_start, year_end, picture) VALUES 
-          (1, 'Mona Lisa', 'Leonardo da Vinci', 1503, 1506, 'https://github.com/user-attachments/assets/e8b028bf-1e4f-4629-a11c-524069d38858'),
-          (2, 'Hvězdná noc', 'Vincent van Gogh', 1889, 1889, 'https://github.com/user-attachments/assets/08aa840d-b8fc-49a4-a660-fc3fb0dd6e61'),
-          (3, 'Výkřik', 'Edvard Munch', 1893, 1893, 'https://github.com/user-attachments/assets/e23d7952-7c0f-45ff-add4-6e1a6e352a0e')`
+          (1, 'Portrét Arnolfiniho', 'Jan van Eyck', 1434, 1434, 'https://github.com/4Tomek/art_images/releases/download/v1.0/portret_arnolfiniho.jpg'),
+          (2, 'Zrození Venuše', 'Sandro Botticelli', 1484, 1486, 'https://github.com/4Tomek/art_images/releases/download/v1.0/zrozeni_venuse.jpg'),
+          (3, 'Mona Lisa', 'Leonardo da Vinci', 1503, 1506, 'https://github.com/4Tomek/art_images/releases/download/v1.0/mona_lisa.jpg'),
+          (4, 'Dívka s perlou', 'Johannes Vermeer', 1665, 1665, 'https://github.com/4Tomek/art_images/releases/download/v1.0/divka_s_perlou.jpg'),
+          (5, 'Hvězdná noc', 'Vincent van Gogh', 1889, 1889, 'https://github.com/4Tomek/art_images/releases/download/v1.0/hvezdna_noc.jpg'),
+          (6, 'Výkřik', 'Edvard Munch', 1893, 1893, 'https://github.com/4Tomek/art_images/releases/download/v1.0/vykrik.jpg'),
+          (7, 'Kompozice A', 'Piet Mondrian', 1920, 1920, 'https://github.com/4Tomek/art_images/releases/download/v1.0/composition_a.jpg')`
         );
         console.log('Data byla vložena do databáze');
       }
@@ -415,7 +420,10 @@ export default function App() {
                 <Ionicons name="calendar-outline" size={18} color="#666" style={styles.scoreIcon} />
                 <Text style={[
                   styles.scoreText,
-                  { color: scores.years === 0 ? '#4CAF50' : '#F44336' }
+                  { color: 
+                    !showAnswer && currentRound === 1 && scores.years === 0 ? '#333' :
+                    scores.years === 0 ? '#4CAF50' : '#F44336' 
+                  }
                 ]}>
                   {scores.years}
                 </Text>
@@ -427,7 +435,15 @@ export default function App() {
         <TouchableOpacity onPress={() => setImageZoomVisible(true)}>
           <Image
             source={{ uri: currentArtwork.picture }}
-            style={styles.artworkImage}
+            style={[
+              styles.artworkImage,
+              {
+                height: 
+                  Object.values(selectedCategories).filter(Boolean).length === 1 ? 420 :
+                  Object.values(selectedCategories).filter(Boolean).length === 2 ? 350 :
+                  280
+              }
+            ]}
             resizeMode="contain"
           />
         </TouchableOpacity>
@@ -436,20 +452,55 @@ export default function App() {
         <Modal
           visible={imageZoomVisible}
           transparent={true}
-          onRequestClose={() => setImageZoomVisible(false)}
+          onRequestClose={() => {
+            setImageZoomVisible(false);
+            setZoomLevel(1);
+          }}
         >
           <View style={styles.modalContainer}>
             <TouchableOpacity 
               style={styles.modalCloseButton}
-              onPress={() => setImageZoomVisible(false)}
+              onPress={() => {
+                setImageZoomVisible(false);
+                setZoomLevel(1);
+              }}
             >
               <Ionicons name="close-circle" size={40} color="#fff" />
             </TouchableOpacity>
-            <Image
-              source={{ uri: currentArtwork.picture }}
-              style={styles.zoomedImage}
-              resizeMode="contain"
-            />
+            
+            {/* Zoom controls */}
+            <View style={styles.zoomControls}>
+              <TouchableOpacity 
+                style={styles.zoomButton}
+                onPress={() => setZoomLevel(prev => Math.min(prev + 0.5, 3))}
+              >
+                <Ionicons name="add-circle" size={40} color="#fff" />
+              </TouchableOpacity>
+              <Text style={styles.zoomLevelText}>{Math.round(zoomLevel * 100)}%</Text>
+              <TouchableOpacity 
+                style={styles.zoomButton}
+                onPress={() => setZoomLevel(prev => Math.max(prev - 0.5, 1))}
+              >
+                <Ionicons name="remove-circle" size={40} color="#fff" />
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView
+              contentContainerStyle={styles.zoomScrollContent}
+              showsHorizontalScrollIndicator={false}
+              showsVerticalScrollIndicator={false}
+            >
+              <Image
+                source={{ uri: currentArtwork.picture }}
+                style={[
+                  styles.zoomedImage,
+                  { 
+                    transform: [{ scale: zoomLevel }],
+                  }
+                ]}
+                resizeMode="contain"
+              />
+            </ScrollView>
           </View>
         </Modal>
 
@@ -670,7 +721,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
   },
   scrollContent: {
-    paddingBottom: 30,
+    paddingBottom: 50,
   },
   loadingText: {
     marginTop: 10,
@@ -769,14 +820,13 @@ const styles = StyleSheet.create({
   },
   artworkImage: {
     width: '90%',
-    height: 220,
     alignSelf: 'center',
     marginBottom: 15,
     borderRadius: 10,
   },
   inputContainer: {
     paddingHorizontal: 20,
-    paddingBottom: 100,
+    paddingBottom: 15,
   },
   inputRow: {
     flexDirection: 'row',
@@ -808,9 +858,32 @@ const styles = StyleSheet.create({
     right: 20,
     zIndex: 1,
   },
+  zoomControls: {
+    position: 'absolute',
+    bottom: 50,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  zoomButton: {
+    marginHorizontal: 15,
+  },
+  zoomLevelText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    minWidth: 60,
+    textAlign: 'center',
+  },
+  zoomScrollContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   zoomedImage: {
-    width: '95%',
-    height: '80%',
+    width: 380,
+    height: 600,
   },
   submitButton: {
     backgroundColor: '#2196F3',
@@ -826,6 +899,7 @@ const styles = StyleSheet.create({
   },
   answerContainer: {
     paddingHorizontal: 20,
+    paddingBottom: 80,
   },
   scoreRow: {
     flexDirection: 'row',
@@ -900,6 +974,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#4CAF50',
     paddingVertical: 15,
     borderRadius: 10,
+    marginBottom: 20,
   },
   nextButtonText: {
     color: '#fff',
