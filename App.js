@@ -45,13 +45,20 @@ const wordsMatch = (userAnswer, correctAnswer) => {
 };
 
 export default function App() {
-  const [screen, setScreen] = useState('home'); // 'home', 'quiz', 'results'
-  const [selectedRounds, setSelectedRounds] = useState(1);
+  const [screen, setScreen] = useState('home'); // 'home', 'quiz', 'results', 'settings'
+  const [selectedRounds, setSelectedRounds] = useState(3);
   const [selectedCategories, setSelectedCategories] = useState({
     title: true,
     author: true,
     year: true,
   });
+  const [settingsData, setSettingsData] = useState({
+    textbooks: ['Basic Textbook', 'Textbook 1'],
+    activeTextbooks: [1, 0],
+    artworksByTextbook: {},
+  });
+  const [tempSettings, setTempSettings] = useState(null);
+  const [expandedTextbooks, setExpandedTextbooks] = useState({});
   const [currentRound, setCurrentRound] = useState(1);
   const [currentArtwork, setCurrentArtwork] = useState(null);
   const [usedIds, setUsedIds] = useState([]);
@@ -92,41 +99,146 @@ export default function App() {
 
   const initDatabase = async () => {
     try {
-      // Vytvoření tabulky
+      // Vytvoření tabulky artworks
       await db.execAsync(`
         CREATE TABLE IF NOT EXISTS artworks (
-          id INTEGER PRIMARY KEY,
+          id TEXT PRIMARY KEY,
           title TEXT NOT NULL,
           author TEXT NOT NULL,
           year_start INTEGER NOT NULL,
           year_end INTEGER NOT NULL,
-          picture TEXT NOT NULL
+          picture TEXT NOT NULL,
+          textbook TEXT NOT NULL,
+          chapter INTEGER NOT NULL,
+          is_active INTEGER NOT NULL
         );
       `);
 
-      // Kontrola, zda je databáze prázdná
-      const result = await db.getAllAsync('SELECT COUNT(*) as count FROM artworks');
-      
-      if (result[0].count === 0) {
-        // Vložení počátečních dat
-        await db.runAsync(
-          `INSERT INTO artworks (id, title, author, year_start, year_end, picture) VALUES 
-          (1, 'Portrét Arnolfiniho', 'Jan van Eyck', 1434, 1434, 'https://github.com/4Tomek/art_images/releases/download/v1.0/portret_arnolfiniho.jpg'),
-          (2, 'Zrození Venuše', 'Sandro Botticelli', 1484, 1486, 'https://github.com/4Tomek/art_images/releases/download/v1.0/zrozeni_venuse.jpg'),
-          (3, 'Mona Lisa', 'Leonardo da Vinci', 1503, 1506, 'https://github.com/4Tomek/art_images/releases/download/v1.0/mona_lisa.jpg'),
-          (4, 'Dívka s perlou', 'Johannes Vermeer', 1665, 1665, 'https://github.com/4Tomek/art_images/releases/download/v1.0/divka_s_perlou.jpg'),
-          (5, 'Hvězdná noc', 'Vincent van Gogh', 1889, 1889, 'https://github.com/4Tomek/art_images/releases/download/v1.0/hvezdna_noc.jpg'),
-          (6, 'Výkřik', 'Edvard Munch', 1893, 1893, 'https://github.com/4Tomek/art_images/releases/download/v1.0/vykrik.jpg'),
-          (7, 'Kompozice A', 'Piet Mondrian', 1920, 1920, 'https://github.com/4Tomek/art_images/releases/download/v1.0/composition_a.jpg')`
+      // Vytvoření tabulky settings
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS settings (
+          id INTEGER PRIMARY KEY,
+          rounds INTEGER NOT NULL,
+          rows TEXT NOT NULL,
+          active_rows TEXT NOT NULL,
+          textbooks TEXT NOT NULL,
+          active_textbooks TEXT NOT NULL
         );
-        console.log('Data byla vložena do databáze');
+      `);
+
+      // Kontrola, zda je databáze artworks prázdná
+      const artworksResult = await db.getAllAsync('SELECT COUNT(*) as count FROM artworks');
+      
+      if (artworksResult[0].count === 0) {
+        // Vložení počátečních dat do artworks
+        await db.runAsync(
+          `INSERT INTO artworks (id, title, author, year_start, year_end, picture, textbook, chapter, is_active) VALUES 
+          ('1-1', 'Portrét Arnolfiniho', 'Jan van Eyck', 1434, 1434, 'https://github.com/4Tomek/art_images/releases/download/v1.0/portret_arnolfiniho.jpg', 'Basic Textbook', 1, 1),
+          ('1-2', 'Zrození Venuše', 'Sandro Botticelli', 1484, 1486, 'https://github.com/4Tomek/art_images/releases/download/v1.0/zrozeni_venuse.jpg', 'Basic Textbook', 1, 1),
+          ('1-3', 'Mona Lisa', 'Leonardo da Vinci', 1503, 1506, 'https://github.com/4Tomek/art_images/releases/download/v1.0/mona_lisa.jpg', 'Basic Textbook', 1, 1),
+          ('1-4', 'Dívka s perlou', 'Johannes Vermeer', 1665, 1665, 'https://github.com/4Tomek/art_images/releases/download/v1.0/divka_s_perlou.jpg', 'Basic Textbook', 1, 1),
+          ('1-5', 'Hvězdná noc', 'Vincent van Gogh', 1889, 1889, 'https://github.com/4Tomek/art_images/releases/download/v1.0/hvezdna_noc.jpg', 'Basic Textbook', 1, 1),
+          ('1-6', 'Výkřik', 'Edvard Munch', 1893, 1893, 'https://github.com/4Tomek/art_images/releases/download/v1.0/vykrik.jpg', 'Basic Textbook', 1, 1),
+          ('1-7', 'Kompozice A', 'Piet Mondrian', 1920, 1920, 'https://github.com/4Tomek/art_images/releases/download/v1.0/composition_a.jpg', 'Basic Textbook', 1, 1),
+          ('2-1', 'Polibek', 'Gustav Klimt', 1907, 1908, 'https://github.com/4Tomek/art_images/releases/download/v1.0/polibek.jpg', 'Textbook 1', 1, 1),
+          ('2-2', 'Kristus nesoucí kříž', 'El Greco', 1580, 1585, 'https://github.com/4Tomek/art_images/releases/download/v1.0/kristus_nesouci_kriz.jpg', 'Textbook 1', 1, 1),
+          ('2-3', 'Sixtinská madona', 'Raffaello Santi', 1512, 1513, 'https://github.com/4Tomek/art_images/releases/download/v1.0/sixtinska_madona.jpg', 'Textbook 1', 1, 1)`
+        );
+        console.log('Data artworks byla vložena do databáze');
       }
+
+      // Kontrola, zda je databáze settings prázdná
+      const settingsResult = await db.getAllAsync('SELECT COUNT(*) as count FROM settings');
+      
+      if (settingsResult[0].count === 0) {
+        // Vložení výchozích nastavení
+        await db.runAsync(
+          `INSERT INTO settings (id, rounds, rows, active_rows, textbooks, active_textbooks) VALUES 
+          (1, 3, '["Title","Author","Year"]', '[1,1,1]', '["Basic Textbook","Textbook 1"]', '[1,0]')`
+        );
+        console.log('Výchozí nastavení bylo vloženo do databáze');
+      }
+
+      // Načtení settings
+      await loadSettings();
       
       setLoading(false);
     } catch (error) {
       console.error('Chyba při inicializaci databáze:', error);
       Alert.alert('Chyba', 'Nepodařilo se inicializovat databázi');
       setLoading(false);
+    }
+  };
+
+  const loadSettings = async () => {
+    try {
+      const settings = await db.getAllAsync('SELECT * FROM settings WHERE id = 1');
+      if (settings.length > 0) {
+        const s = settings[0];
+        const textbooks = JSON.parse(s.textbooks);
+        const activeTextbooks = JSON.parse(s.active_textbooks);
+        const activeRows = JSON.parse(s.active_rows);
+        
+        setSelectedRounds(s.rounds);
+        setSelectedCategories({
+          title: activeRows[0] === 1,
+          author: activeRows[1] === 1,
+          year: activeRows[2] === 1,
+        });
+
+        // Načtení artworks po učebnicích
+        const artworksByTextbook = {};
+        for (const textbook of textbooks) {
+          const artworks = await db.getAllAsync(
+            'SELECT * FROM artworks WHERE textbook = ?',
+            [textbook]
+          );
+          artworksByTextbook[textbook] = artworks;
+        }
+
+        setSettingsData({
+          textbooks,
+          activeTextbooks,
+          artworksByTextbook,
+        });
+      }
+    } catch (error) {
+      console.error('Chyba při načítání nastavení:', error);
+    }
+  };
+
+  const saveSettings = async (tempData) => {
+    try {
+      const activeRows = [
+        selectedCategories.title ? 1 : 0,
+        selectedCategories.author ? 1 : 0,
+        selectedCategories.year ? 1 : 0,
+      ];
+
+      await db.runAsync(
+        `UPDATE settings SET 
+          rounds = ?, 
+          active_rows = ?, 
+          active_textbooks = ? 
+        WHERE id = 1`,
+        [selectedRounds, JSON.stringify(activeRows), JSON.stringify(tempData.activeTextbooks)]
+      );
+
+      // Uložení is_active pro artworks
+      for (const textbook in tempData.artworksByTextbook) {
+        for (const artwork of tempData.artworksByTextbook[textbook]) {
+          await db.runAsync(
+            'UPDATE artworks SET is_active = ? WHERE id = ?',
+            [artwork.is_active, artwork.id]
+          );
+        }
+      }
+
+      await loadSettings();
+      console.log('Nastavení bylo uloženo');
+    } catch (error) {
+      console.error('Chyba při ukládání nastavení:', error);
+      Alert.alert('Chyba', 'Nepodařilo se uložit nastavení');
     }
   };
 
@@ -140,13 +252,32 @@ export default function App() {
 
   const loadRandomArtwork = async (excludeIds) => {
     try {
-      // Získání všech ID kromě již použitých
-      const placeholders = excludeIds.length > 0 ? excludeIds.map(() => '?').join(',') : '';
-      const query = excludeIds.length > 0 
-        ? `SELECT * FROM artworks WHERE id NOT IN (${placeholders}) ORDER BY RANDOM() LIMIT 1`
-        : 'SELECT * FROM artworks ORDER BY RANDOM() LIMIT 1';
+      // Vytvoření seznamu aktivních učebnic
+      const activeTextbookNames = settingsData.textbooks.filter((_, index) => 
+        settingsData.activeTextbooks[index] === 1
+      );
+
+      if (activeTextbookNames.length === 0) {
+        Alert.alert('Chyba', 'Žádná učebnice není aktivní. Prosím zapněte alespoň jednu učebnici v nastavení.');
+        setScreen('home');
+        return;
+      }
+
+      // Vytvoření SQL dotazu s filtrem
+      const textbookPlaceholders = activeTextbookNames.map(() => '?').join(',');
+      const excludePlaceholders = excludeIds.length > 0 ? excludeIds.map(() => '?').join(',') : '';
       
-      const result = await db.getAllAsync(query, excludeIds);
+      let query = `SELECT * FROM artworks WHERE is_active = 1 AND textbook IN (${textbookPlaceholders})`;
+      let params = [...activeTextbookNames];
+      
+      if (excludeIds.length > 0) {
+        query += ` AND id NOT IN (${excludePlaceholders})`;
+        params = [...params, ...excludeIds];
+      }
+      
+      query += ' ORDER BY RANDOM() LIMIT 1';
+      
+      const result = await db.getAllAsync(query, params);
       
       if (result.length > 0) {
         setCurrentArtwork(result[0]);
@@ -353,7 +484,129 @@ export default function App() {
         <TouchableOpacity style={styles.startButton} onPress={startQuiz}>
           <Text style={styles.startButtonText}>START</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.settingsButton} 
+          onPress={() => {
+            setTempSettings(JSON.parse(JSON.stringify(settingsData)));
+            setScreen('settings');
+          }}
+        >
+          <Text style={styles.settingsButtonText}>SETTINGS</Text>
+        </TouchableOpacity>
       </View>
+    );
+  }
+
+  // Settings obrazovka
+  if (screen === 'settings' && tempSettings) {
+    return (
+      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+        <Text style={styles.title}>Nastavení</Text>
+
+        <Text style={styles.subtitle}>Učebnice:</Text>
+        
+        {tempSettings.textbooks.map((textbook, index) => {
+          const isExpanded = expandedTextbooks[textbook];
+          const artworks = tempSettings.artworksByTextbook[textbook] || [];
+          const isActive = tempSettings.activeTextbooks[index] === 1;
+
+          return (
+            <View key={textbook} style={styles.textbookContainer}>
+              {/* Textbook header with checkbox */}
+              <TouchableOpacity
+                style={styles.textbookHeader}
+                onPress={() => {
+                  const newActive = [...tempSettings.activeTextbooks];
+                  newActive[index] = newActive[index] === 1 ? 0 : 1;
+                  setTempSettings({
+                    ...tempSettings,
+                    activeTextbooks: newActive,
+                  });
+                }}
+              >
+                <View style={styles.checkboxRow}>
+                  <View style={[styles.checkbox, isActive && styles.checkboxChecked]}>
+                    {isActive && <Ionicons name="checkmark" size={16} color="#fff" />}
+                  </View>
+                  <Text style={styles.textbookTitle}>{textbook}</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => {
+                    setExpandedTextbooks({
+                      ...expandedTextbooks,
+                      [textbook]: !isExpanded,
+                    });
+                  }}
+                >
+                  <Ionicons 
+                    name={isExpanded ? "chevron-up" : "chevron-down"} 
+                    size={24} 
+                    color="#666" 
+                  />
+                </TouchableOpacity>
+              </TouchableOpacity>
+
+              {/* Expanded artworks list */}
+              {isExpanded && (
+                <View style={styles.artworksContainer}>
+                  {artworks.map((artwork) => (
+                    <TouchableOpacity
+                      key={artwork.id}
+                      style={styles.artworkRow}
+                      onPress={() => {
+                        const updatedArtworks = [...artworks];
+                        const artworkIndex = updatedArtworks.findIndex(a => a.id === artwork.id);
+                        updatedArtworks[artworkIndex] = {
+                          ...updatedArtworks[artworkIndex],
+                          is_active: updatedArtworks[artworkIndex].is_active === 1 ? 0 : 1,
+                        };
+                        setTempSettings({
+                          ...tempSettings,
+                          artworksByTextbook: {
+                            ...tempSettings.artworksByTextbook,
+                            [textbook]: updatedArtworks,
+                          },
+                        });
+                      }}
+                    >
+                      <View style={[styles.checkbox, artwork.is_active === 1 && styles.checkboxChecked]}>
+                        {artwork.is_active === 1 && <Ionicons name="checkmark" size={16} color="#fff" />}
+                      </View>
+                      <Text style={styles.artworkText}>{artwork.title}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
+          );
+        })}
+
+        {/* Buttons */}
+        <View style={styles.settingsButtons}>
+          <TouchableOpacity
+            style={[styles.startButton, { backgroundColor: '#4CAF50', flex: 1, marginRight: 10 }]}
+            onPress={async () => {
+              await saveSettings(tempSettings);
+              setScreen('home');
+              setExpandedTextbooks({});
+            }}
+          >
+            <Text style={styles.startButtonText}>SAVE</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.startButton, { backgroundColor: '#757575', flex: 1, marginLeft: 10 }]}
+            onPress={() => {
+              setScreen('home');
+              setTempSettings(null);
+              setExpandedTextbooks({});
+            }}
+          >
+            <Text style={styles.startButtonText}>BACK</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     );
   }
 
@@ -981,6 +1234,81 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     textAlign: 'center',
+  },
+  settingsButton: {
+    backgroundColor: '#757575',
+    paddingVertical: 15,
+    paddingHorizontal: 60,
+    borderRadius: 10,
+    alignSelf: 'center',
+    marginTop: 20,
+  },
+  settingsButtonText: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  textbookContainer: {
+    backgroundColor: '#fff',
+    marginHorizontal: 20,
+    marginBottom: 15,
+    borderRadius: 10,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  textbookHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 15,
+  },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: '#ddd',
+    marginRight: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkboxChecked: {
+    backgroundColor: '#4CAF50',
+    borderColor: '#4CAF50',
+  },
+  textbookTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+  },
+  artworksContainer: {
+    paddingHorizontal: 15,
+    paddingBottom: 15,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+  },
+  artworkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  artworkText: {
+    fontSize: 16,
+    color: '#666',
+  },
+  settingsButtons: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    marginTop: 20,
+    marginBottom: 40,
   },
   resultsTitle: {
     fontSize: 32,
