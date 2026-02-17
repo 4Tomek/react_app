@@ -92,17 +92,29 @@ export default function App() {
     initDatabase();
   }, []);
 
-  useEffect(() => {
-    if (!loading) {
-      updateCategories();
-    }
-  }, [selectedCategories]);
-
   const toggleCategory = (category) => {
-    setSelectedCategories(prev => ({
-      ...prev,
-      [category]: !prev[category]
-    }));
+    const newCategories = {
+      ...selectedCategories,
+      [category]: !selectedCategories[category]
+    };
+    setSelectedCategories(newCategories);
+    
+    // Okamžitě uložit do DB
+    setTimeout(async () => {
+      try {
+        const activeRows = [
+          newCategories.title ? 1 : 0,
+          newCategories.author ? 1 : 0,
+          newCategories.year ? 1 : 0,
+        ];
+        await db.runAsync(
+          'UPDATE settings SET active_rows = ? WHERE id = 1',
+          [JSON.stringify(activeRows)]
+        );
+      } catch (error) {
+        console.error('Chyba při ukládání kategorií:', error);
+      }
+    }, 0);
   };
 
   const updateRounds = async (rounds) => {
@@ -669,7 +681,7 @@ export default function App() {
               setExpandedTextbooks({});
             }}
           >
-            <Text style={[styles.startButtonText, { whiteSpace: 'nowrap' }]}>BACK</Text>
+            <Text style={styles.startButtonText} numberOfLines={1}>BACK</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -680,7 +692,7 @@ export default function App() {
               setExpandedTextbooks({});
             }}
           >
-            <Text style={[styles.startButtonText, { whiteSpace: 'nowrap' }]}>SAVE</Text>
+            <Text style={styles.startButtonText} numberOfLines={1}>SAVE</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -731,7 +743,7 @@ export default function App() {
               setCurrentLearnIndex(0);
             }}
           >
-            <Text style={[styles.startButtonText, { whiteSpace: 'nowrap' }]}>BACK</Text>
+            <Text style={styles.startButtonText} numberOfLines={1}>BACK</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -747,7 +759,7 @@ export default function App() {
               }
             }}
           >
-            <Text style={[styles.startButtonText, { whiteSpace: 'nowrap' }]}>
+            <Text style={styles.startButtonText} numberOfLines={1}>
               {currentLearnIndex < learnArtworks.length - 1 ? 'NEXT' : 'FINISH'}
             </Text>
           </TouchableOpacity>
