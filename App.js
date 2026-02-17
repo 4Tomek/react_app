@@ -45,7 +45,7 @@ const wordsMatch = (userAnswer, correctAnswer) => {
 };
 
 export default function App() {
-  const [screen, setScreen] = useState('home'); // 'home', 'quiz', 'results', 'settings'
+  const [screen, setScreen] = useState('home'); // 'home', 'quiz', 'results', 'settings', 'learn'
   const [selectedRounds, setSelectedRounds] = useState(3);
   const [selectedCategories, setSelectedCategories] = useState({
     title: true,
@@ -59,6 +59,8 @@ export default function App() {
   });
   const [tempSettings, setTempSettings] = useState(null);
   const [expandedTextbooks, setExpandedTextbooks] = useState({});
+  const [learnArtworks, setLearnArtworks] = useState([]);
+  const [currentLearnIndex, setCurrentLearnIndex] = useState(0);
   const [currentRound, setCurrentRound] = useState(1);
   const [currentArtwork, setCurrentArtwork] = useState(null);
   const [usedIds, setUsedIds] = useState([]);
@@ -90,11 +92,45 @@ export default function App() {
     initDatabase();
   }, []);
 
+  useEffect(() => {
+    if (!loading) {
+      updateCategories();
+    }
+  }, [selectedCategories]);
+
   const toggleCategory = (category) => {
     setSelectedCategories(prev => ({
       ...prev,
       [category]: !prev[category]
     }));
+  };
+
+  const updateRounds = async (rounds) => {
+    setSelectedRounds(rounds);
+    try {
+      await db.runAsync(
+        'UPDATE settings SET rounds = ? WHERE id = 1',
+        [rounds]
+      );
+    } catch (error) {
+      console.error('Chyba při ukládání počtu kol:', error);
+    }
+  };
+
+  const updateCategories = async () => {
+    try {
+      const activeRows = [
+        selectedCategories.title ? 1 : 0,
+        selectedCategories.author ? 1 : 0,
+        selectedCategories.year ? 1 : 0,
+      ];
+      await db.runAsync(
+        'UPDATE settings SET active_rows = ? WHERE id = 1',
+        [JSON.stringify(activeRows)]
+      );
+    } catch (error) {
+      console.error('Chyba při ukládání kategorií:', error);
+    }
   };
 
   const initDatabase = async () => {
@@ -248,6 +284,40 @@ export default function App() {
     setUsedIds([]);
     setScores({ titles: 0, authors: 0, years: 0 });
     await loadRandomArtwork([]);
+  };
+
+  const startLearn = async () => {
+    try {
+      // Vytvoření seznamu aktivních učebnic
+      const activeTextbookNames = settingsData.textbooks.filter((_, index) => 
+        settingsData.activeTextbooks[index] === 1
+      );
+
+      if (activeTextbookNames.length === 0) {
+        Alert.alert('Chyba', 'Žádná učebnice není aktivní. Prosím zapněte alespoň jednu učebnici v nastavení.');
+        return;
+      }
+
+      // Načtení všech aktivních artworks seřazených podle roku a názvu
+      const textbookPlaceholders = activeTextbookNames.map(() => '?').join(',');
+      const query = `SELECT * FROM artworks 
+                     WHERE is_active = 1 AND textbook IN (${textbookPlaceholders})
+                     ORDER BY year_start ASC, title ASC`;
+      
+      const result = await db.getAllAsync(query, activeTextbookNames);
+      
+      if (result.length === 0) {
+        Alert.alert('Chyba', 'Žádná díla nejsou aktivní. Prosím zapněte alespoň jedno dílo v nastavení.');
+        return;
+      }
+
+      setLearnArtworks(result);
+      setCurrentLearnIndex(0);
+      setScreen('learn');
+    } catch (error) {
+      console.error('Chyba při načítání děl pro učení:', error);
+      Alert.alert('Chyba', 'Nepodařilo se načíst díla');
+    }
   };
 
   const loadRandomArtwork = async (excludeIds) => {
@@ -467,7 +537,7 @@ export default function App() {
                 styles.roundButton,
                 selectedRounds === num && styles.roundButtonSelected,
               ]}
-              onPress={() => setSelectedRounds(num)}
+              onPress={() => updateRounds(num)}
             >
               <Text
                 style={[
@@ -483,6 +553,13 @@ export default function App() {
 
         <TouchableOpacity style={styles.startButton} onPress={startQuiz}>
           <Text style={styles.startButtonText}>START</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.startButton, { backgroundColor: '#2196F3', marginTop: 15 }]} 
+          onPress={startLearn}
+        >
+          <Text style={styles.startButtonText}>LEARN</Text>
         </TouchableOpacity>
 
         <TouchableOpacity 
@@ -585,25 +662,94 @@ export default function App() {
         {/* Buttons */}
         <View style={styles.settingsButtons}>
           <TouchableOpacity
-            style={[styles.startButton, { backgroundColor: '#4CAF50', flex: 1, marginRight: 10 }]}
-            onPress={async () => {
-              await saveSettings(tempSettings);
-              setScreen('home');
-              setExpandedTextbooks({});
-            }}
-          >
-            <Text style={styles.startButtonText}>SAVE</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.startButton, { backgroundColor: '#757575', flex: 1, marginLeft: 10 }]}
+            style={[styles.startButton, { backgroundColor: '#757575', flex: 1, marginRight: 10 }]}
             onPress={() => {
               setScreen('home');
               setTempSettings(null);
               setExpandedTextbooks({});
             }}
           >
-            <Text style={styles.startButtonText}>BACK</Text>
+            <Text style={[styles.startButtonText, { whiteSpace: 'nowrap' }]}>BACK</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.startButton, { backgroundColor: '#4CAF50', flex: 1, marginLeft: 10 }]}
+            onPress={async () => {
+              await saveSettings(tempSettings);
+              setScreen('home');
+              setExpandedTextbooks({});
+            }}
+          >
+            <Text style={[styles.startButtonText, { whiteSpace: 'nowrap' }]}>SAVE</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    );
+  }
+
+  // Learn obrazovka
+  if (screen === 'learn' && learnArtworks.length > 0) {
+    const currentArtwork = learnArtworks[currentLearnIndex];
+    
+    return (
+      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+        <Text style={styles.title}>Učení ({currentLearnIndex + 1}/{learnArtworks.length})</Text>
+
+        <Image
+          source={{ uri: currentArtwork.picture }}
+          style={styles.learnImage}
+          resizeMode="contain"
+        />
+
+        <View style={styles.learnInfoContainer}>
+          <View style={styles.learnInfoRow}>
+            <Ionicons name="image-outline" size={24} color="#666" style={styles.learnIcon} />
+            <Text style={styles.learnInfoText}>{currentArtwork.title}</Text>
+          </View>
+
+          <View style={styles.learnInfoRow}>
+            <Ionicons name="person-outline" size={24} color="#666" style={styles.learnIcon} />
+            <Text style={styles.learnInfoText}>{currentArtwork.author}</Text>
+          </View>
+
+          <View style={styles.learnInfoRow}>
+            <Ionicons name="calendar-outline" size={24} color="#666" style={styles.learnIcon} />
+            <Text style={styles.learnInfoText}>
+              {currentArtwork.year_start === currentArtwork.year_end 
+                ? currentArtwork.year_start 
+                : `${currentArtwork.year_start}-${currentArtwork.year_end}`}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.learnButtons}>
+          <TouchableOpacity
+            style={[styles.startButton, { backgroundColor: '#757575', flex: 1, marginRight: 10 }]}
+            onPress={() => {
+              setScreen('home');
+              setLearnArtworks([]);
+              setCurrentLearnIndex(0);
+            }}
+          >
+            <Text style={[styles.startButtonText, { whiteSpace: 'nowrap' }]}>BACK</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.startButton, { backgroundColor: '#4CAF50', flex: 1, marginLeft: 10 }]}
+            onPress={() => {
+              if (currentLearnIndex < learnArtworks.length - 1) {
+                setCurrentLearnIndex(currentLearnIndex + 1);
+              } else {
+                // Poslední dílo - vrátit se na začátek nebo home
+                setScreen('home');
+                setLearnArtworks([]);
+                setCurrentLearnIndex(0);
+              }
+            }}
+          >
+            <Text style={[styles.startButtonText, { whiteSpace: 'nowrap' }]}>
+              {currentLearnIndex < learnArtworks.length - 1 ? 'NEXT' : 'FINISH'}
+            </Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -1305,6 +1451,44 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   settingsButtons: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    marginTop: 20,
+    marginBottom: 40,
+  },
+  learnImage: {
+    width: '90%',
+    height: 350,
+    alignSelf: 'center',
+    marginBottom: 30,
+    borderRadius: 10,
+  },
+  learnInfoContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 30,
+  },
+  learnInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    backgroundColor: '#fff',
+    padding: 15,
+    borderRadius: 10,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  learnIcon: {
+    marginRight: 15,
+  },
+  learnInfoText: {
+    fontSize: 18,
+    color: '#333',
+    flex: 1,
+  },
+  learnButtons: {
     flexDirection: 'row',
     paddingHorizontal: 20,
     marginTop: 20,
