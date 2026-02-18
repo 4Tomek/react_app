@@ -570,10 +570,10 @@ export default function App() {
   if (screen === 'settings' && tempSettings) {
     return (
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.title}>Nastavení</Text>
+        <Text style={[styles.title, { fontSize: 24 }]}>Nastavení</Text>
 
         {/* Kategorie */}
-        <Text style={styles.subtitle}>Kategorie:</Text>
+        <Text style={[styles.subtitle, { fontSize: 16 }]}>Kategorie:</Text>
         <View style={styles.buttonGroup}>
           <TouchableOpacity
             style={[
@@ -628,7 +628,7 @@ export default function App() {
         </View>
 
         {/* Počet kol */}
-        <Text style={styles.subtitle}>Počet kol:</Text>
+        <Text style={[styles.subtitle, { fontSize: 16 }]}>Počet kol:</Text>
         <View style={styles.buttonGroup}>
           {[1, 3, 7].map((num) => (
             <TouchableOpacity
@@ -651,7 +651,7 @@ export default function App() {
           ))}
         </View>
 
-        <Text style={styles.subtitle}>Učebnice:</Text>
+        <Text style={[styles.subtitle, { fontSize: 16 }]}>Učebnice:</Text>
         
         {tempSettings.textbooks.map((textbook, index) => {
           const isExpanded = expandedTextbooks[textbook];
@@ -729,12 +729,18 @@ export default function App() {
           );
         })}
 
-        {/* Obnovit data button */}
+        {/* Aktualizovat učebnice button */}
         <TouchableOpacity 
-          style={[styles.startButton, { backgroundColor: '#FF9800', marginHorizontal: 20, marginTop: 20 }]}
+          style={[styles.startButton, { 
+            backgroundColor: '#FF9800', 
+            marginHorizontal: 20, 
+            marginTop: 20,
+            paddingVertical: 10,
+            paddingHorizontal: 30
+          }]}
           onPress={refreshData}
         >
-          <Text style={styles.startButtonText}>Obnovit data</Text>
+          <Text style={[styles.startButtonText, { fontSize: 16 }]}>AKTUALIZOVAT UČEBNICE</Text>
         </TouchableOpacity>
 
         {/* Buttons */}
@@ -753,7 +759,7 @@ export default function App() {
               setExpandedTextbooks({});
             }}
           >
-            <Text style={styles.startButtonText} numberOfLines={1}>BACK</Text>
+            <Text style={styles.startButtonText} numberOfLines={1}>NEUKLÁDAT</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -765,7 +771,7 @@ export default function App() {
               setExpandedTextbooks({});
             }}
           >
-            <Text style={styles.startButtonText} numberOfLines={1}>SAVE</Text>
+            <Text style={styles.startButtonText} numberOfLines={1}>ULOŽIT</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -1209,8 +1215,12 @@ export default function App() {
     let yearsPercent = 0;
     if (selectedCategories.year) {
       const avgError = scores.years / selectedRounds;
-      const k = 0.01;
-      yearsPercent = Math.round(100 * Math.exp(-k * avgError));
+      if (avgError >= 500) {
+        yearsPercent = 0;
+      } else {
+        const k = 0.01;
+        yearsPercent = Math.round(100 * Math.exp(-k * avgError));
+      }
       percentages.push(yearsPercent);
       totalPercentage += yearsPercent;
       activeCategories++;
@@ -1313,7 +1323,7 @@ const styles = StyleSheet.create({
     borderColor: '#2196F3',
   },
   roundButtonText: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#333',
     fontWeight: '600',
   },
@@ -1334,7 +1344,7 @@ const styles = StyleSheet.create({
     borderColor: '#4CAF50',
   },
   categoryButtonText: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#333',
     fontWeight: '600',
   },
@@ -1352,6 +1362,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 20,
     fontWeight: 'bold',
+    textAlign: 'center',
   },
   scoreHeader: {
     backgroundColor: '#fff',
@@ -1584,7 +1595,7 @@ const styles = StyleSheet.create({
     borderColor: '#4CAF50',
   },
   textbookTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
     color: '#333',
   },
@@ -1600,7 +1611,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   artworkText: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#666',
   },
   settingsButtons: {
