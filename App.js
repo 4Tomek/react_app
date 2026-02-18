@@ -58,6 +58,7 @@ export default function App() {
     artworksByTextbook: {},
   });
   const [tempSettings, setTempSettings] = useState(null);
+  const [originalSettings, setOriginalSettings] = useState(null);
   const [expandedTextbooks, setExpandedTextbooks] = useState({});
   const [learnArtworks, setLearnArtworks] = useState([]);
   const [currentLearnIndex, setCurrentLearnIndex] = useState(0);
@@ -94,40 +95,14 @@ export default function App() {
   }, []);
 
   const toggleCategory = (category) => {
-    const newCategories = {
-      ...selectedCategories,
-      [category]: !selectedCategories[category]
-    };
-    setSelectedCategories(newCategories);
-    
-    // Okamžitě uložit do DB
-    setTimeout(async () => {
-      try {
-        const activeRows = [
-          newCategories.title ? 1 : 0,
-          newCategories.author ? 1 : 0,
-          newCategories.year ? 1 : 0,
-        ];
-        await db.runAsync(
-          'UPDATE settings SET active_rows = ? WHERE id = 1',
-          [JSON.stringify(activeRows)]
-        );
-      } catch (error) {
-        console.error('Chyba při ukládání kategorií:', error);
-      }
-    }, 0);
+    setSelectedCategories(prev => ({
+      ...prev,
+      [category]: !prev[category]
+    }));
   };
 
-  const updateRounds = async (rounds) => {
+  const updateRounds = (rounds) => {
     setSelectedRounds(rounds);
-    try {
-      await db.runAsync(
-        'UPDATE settings SET rounds = ? WHERE id = 1',
-        [rounds]
-      );
-    } catch (error) {
-      console.error('Chyba při ukládání počtu kol:', error);
-    }
   };
 
   const updateCategories = async () => {
@@ -531,7 +506,6 @@ export default function App() {
 
   const resetQuiz = () => {
     setScreen('home');
-    setSelectedRounds(1);
     setCurrentRound(1);
     setCurrentArtwork(null);
     setUsedIds([]);
@@ -561,6 +535,10 @@ export default function App() {
             style={styles.settingsIcon}
             onPress={() => {
               setTempSettings(JSON.parse(JSON.stringify(settingsData)));
+              setOriginalSettings({
+                categories: { ...selectedCategories },
+                rounds: selectedRounds
+              });
               setScreen('settings');
             }}
           >
@@ -574,13 +552,13 @@ export default function App() {
 
         <View style={styles.homeBottom}>
           <TouchableOpacity 
-            style={[styles.startButton, { backgroundColor: '#2196F3', marginBottom: 15 }]} 
+            style={[styles.startButton, { backgroundColor: '#2196F3', marginBottom: 15, alignSelf: 'stretch' }]} 
             onPress={startLearn}
           >
             <Text style={styles.startButtonText}>UČIT SE</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.startButton} onPress={startQuiz}>
+          <TouchableOpacity style={[styles.startButton, { alignSelf: 'stretch' }]} onPress={startQuiz}>
             <Text style={styles.startButtonText}>KVÍZ</Text>
           </TouchableOpacity>
         </View>
@@ -764,8 +742,14 @@ export default function App() {
           <TouchableOpacity
             style={[styles.startButton, { backgroundColor: '#757575', flex: 1, marginRight: 10 }]}
             onPress={() => {
+              // Vrátit původní stav
+              if (originalSettings) {
+                setSelectedCategories(originalSettings.categories);
+                setSelectedRounds(originalSettings.rounds);
+              }
               setScreen('home');
               setTempSettings(null);
+              setOriginalSettings(null);
               setExpandedTextbooks({});
             }}
           >
@@ -777,6 +761,7 @@ export default function App() {
             onPress={async () => {
               await saveSettings(tempSettings);
               setScreen('home');
+              setOriginalSettings(null);
               setExpandedTextbooks({});
             }}
           >
@@ -1197,20 +1182,57 @@ export default function App() {
 
   // Výsledková obrazovka
   if (screen === 'results') {
+    // Výpočet procent
+    const percentages = [];
+    let totalPercentage = 0;
+    let activeCategories = 0;
+
+    // Díla
+    let titlesPercent = 0;
+    if (selectedCategories.title) {
+      titlesPercent = Math.round((scores.titles / selectedRounds) * 100);
+      percentages.push(titlesPercent);
+      totalPercentage += titlesPercent;
+      activeCategories++;
+    }
+
+    // Autoři
+    let authorsPercent = 0;
+    if (selectedCategories.author) {
+      authorsPercent = Math.round((scores.authors / selectedRounds) * 100);
+      percentages.push(authorsPercent);
+      totalPercentage += authorsPercent;
+      activeCategories++;
+    }
+
+    // Roky - exponenciální funkce
+    let yearsPercent = 0;
+    if (selectedCategories.year) {
+      const avgError = scores.years / selectedRounds;
+      const k = 0.01;
+      yearsPercent = Math.round(100 * Math.exp(-k * avgError));
+      percentages.push(yearsPercent);
+      totalPercentage += yearsPercent;
+      activeCategories++;
+    }
+
+    const overallPercent = activeCategories > 0 ? Math.round(totalPercentage / activeCategories) : 0;
+
     return (
       <View style={styles.container}>
         <Text style={styles.resultsTitle}>Tvoje skóre:</Text>
         <View style={styles.resultsContainer}>
           <Text style={styles.resultsText}>Kola: {selectedRounds}</Text>
           {selectedCategories.title && (
-            <Text style={styles.resultsText}>Díla: {scores.titles}</Text>
+            <Text style={styles.resultsText}>Díla: {scores.titles} ({titlesPercent} %)</Text>
           )}
           {selectedCategories.author && (
-            <Text style={styles.resultsText}>Autoři: {scores.authors}</Text>
+            <Text style={styles.resultsText}>Autoři: {scores.authors} ({authorsPercent} %)</Text>
           )}
           {selectedCategories.year && (
-            <Text style={styles.resultsText}>Roky (odchylka): {scores.years}</Text>
+            <Text style={styles.resultsText}>Roky (odchylka): {scores.years} ({yearsPercent} %)</Text>
           )}
+          <Text style={[styles.resultsText, { fontWeight: 'bold', marginTop: 10 }]}>Celkem: {overallPercent} %</Text>
         </View>
 
         <TouchableOpacity style={styles.startButton} onPress={resetQuiz}>

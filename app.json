@@ -24,6 +24,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "67d8cbb9-e41a-4f6b-a80d-563be8b442d4"
+      }
+    },
+    "owner": "4tomek"
   }
 }
