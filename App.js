@@ -61,6 +61,7 @@ export default function App() {
   const [expandedTextbooks, setExpandedTextbooks] = useState({});
   const [learnArtworks, setLearnArtworks] = useState([]);
   const [currentLearnIndex, setCurrentLearnIndex] = useState(0);
+  const [imageLoading, setImageLoading] = useState(true);
   const [currentRound, setCurrentRound] = useState(1);
   const [currentArtwork, setCurrentArtwork] = useState(null);
   const [usedIds, setUsedIds] = useState([]);
@@ -290,6 +291,75 @@ export default function App() {
     }
   };
 
+  const refreshData = async () => {
+    try {
+      Alert.alert('Potvrzení', 'Opravdu chcete obnovit data z internetu?', [
+        { text: 'Zrušit', style: 'cancel' },
+        {
+          text: 'Ano',
+          onPress: async () => {
+            try {
+              const response = await fetch('https://raw.githubusercontent.com/4Tomek/art_images/main/artworks.json');
+              const data = await response.json();
+              
+              // Načíst aktuální textbooks z settings
+              const settings = await db.getAllAsync('SELECT * FROM settings WHERE id = 1');
+              let textbooks = JSON.parse(settings[0].textbooks);
+              let activeTextbooks = JSON.parse(settings[0].active_textbooks);
+              
+              for (const item of data) {
+                // Zkontrolovat zda již existuje
+                const existing = await db.getAllAsync(
+                  'SELECT * FROM artworks WHERE id = ?',
+                  [item.id]
+                );
+                
+                if (existing.length === 0) {
+                  // Zkontrolovat zda učebnice existuje v settings
+                  if (!textbooks.includes(item.category)) {
+                    textbooks.push(item.category);
+                    activeTextbooks.push(0); // Nová učebnice je defaultně neaktivní
+                  }
+                  
+                  // Vložit nové dílo
+                  await db.runAsync(
+                    `INSERT INTO artworks (id, title, author, year_start, year_end, picture, textbook, chapter, is_active) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [
+                      item.id,
+                      item.title,
+                      item.artist,
+                      item.year_start,
+                      item.year_end,
+                      item.image_url,
+                      item.category,
+                      item.level,
+                      item.is_active
+                    ]
+                  );
+                }
+              }
+              
+              // Uložit aktualizované textbooks
+              await db.runAsync(
+                'UPDATE settings SET textbooks = ?, active_textbooks = ? WHERE id = 1',
+                [JSON.stringify(textbooks), JSON.stringify(activeTextbooks)]
+              );
+              
+              await loadSettings();
+              Alert.alert('Hotovo', 'Data byla aktualizována');
+            } catch (error) {
+              console.error('Chyba při stahování dat:', error);
+              Alert.alert('Chyba', 'Nepodařilo se stáhnout data z internetu');
+            }
+          }
+        }
+      ]);
+    } catch (error) {
+      console.error('Chyba:', error);
+    }
+  };
+
   const startQuiz = async () => {
     setScreen('quiz');
     setCurrentRound(1);
@@ -323,6 +393,7 @@ export default function App() {
         return;
       }
 
+      setImageLoading(true);
       setLearnArtworks(result);
       setCurrentLearnIndex(0);
       setScreen('learn');
@@ -362,6 +433,7 @@ export default function App() {
       const result = await db.getAllAsync(query, params);
       
       if (result.length > 0) {
+        setImageLoading(true);
         setCurrentArtwork(result[0]);
         setTitleInput('');
         setAuthorInput('');
@@ -393,7 +465,7 @@ export default function App() {
         newScores.titles += 1;
         newShowUserAnswers.title = false; // Správná = sbaleno
       } else {
-        newShowUserAnswers.title = true; // Špatná = rozbaleno
+        newShowUserAnswers.title = false; // Špatná = také sbaleno
       }
     }
 
@@ -404,7 +476,7 @@ export default function App() {
         newScores.authors += 1;
         newShowUserAnswers.author = false; // Správná = sbaleno
       } else {
-        newShowUserAnswers.author = true; // Špatná = rozbaleno
+        newShowUserAnswers.author = false; // Špatná = také sbaleno
       }
     }
 
@@ -415,18 +487,18 @@ export default function App() {
         // Penalizace za nevyplnění nebo neplatné číslo
         newScores.years += 500;
         yearDiff = 'penalty: +500';
-        newShowUserAnswers.year = true; // Špatná = rozbaleno
+        newShowUserAnswers.year = false; // Špatná = sbaleno
       } else {
         if (year < currentArtwork.year_start) {
           const diff = currentArtwork.year_start - year;
           newScores.years += diff;
           yearDiff = `+${diff}`;
-          newShowUserAnswers.year = true; // Špatná = rozbaleno
+          newShowUserAnswers.year = false; // Špatná = sbaleno
         } else if (year > currentArtwork.year_end) {
           const diff = year - currentArtwork.year_end;
           newScores.years += diff;
           yearDiff = `+${diff}`;
-          newShowUserAnswers.year = true; // Špatná = rozbaleno
+          newShowUserAnswers.year = false; // Špatná = sbaleno
         } else {
           // Rok je v rozmezí - nevypisovat nic
           yearDiff = null;
@@ -484,9 +556,46 @@ export default function App() {
   if (screen === 'home') {
     return (
       <View style={styles.container}>
-        <Text style={styles.title}>Kvíz uměleckých děl</Text>
-        
-        <Text style={styles.subtitle}>Vyber kategorie:</Text>
+        <View style={styles.homeHeader}>
+          <TouchableOpacity 
+            style={styles.settingsIcon}
+            onPress={() => {
+              setTempSettings(JSON.parse(JSON.stringify(settingsData)));
+              setScreen('settings');
+            }}
+          >
+            <Ionicons name="settings-outline" size={32} color="#757575" />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.homeCenter}>
+          <Text style={styles.title}>Kvíz uměleckých děl</Text>
+        </View>
+
+        <View style={styles.homeBottom}>
+          <TouchableOpacity 
+            style={[styles.startButton, { backgroundColor: '#2196F3', marginBottom: 15 }]} 
+            onPress={startLearn}
+          >
+            <Text style={styles.startButtonText}>UČIT SE</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.startButton} onPress={startQuiz}>
+            <Text style={styles.startButtonText}>KVÍZ</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  // Settings obrazovka
+  if (screen === 'settings' && tempSettings) {
+    return (
+      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+        <Text style={styles.title}>Nastavení</Text>
+
+        {/* Kategorie */}
+        <Text style={styles.subtitle}>Kategorie:</Text>
         <View style={styles.buttonGroup}>
           <TouchableOpacity
             style={[
@@ -501,7 +610,7 @@ export default function App() {
                 selectedCategories.title && styles.categoryButtonTextSelected,
               ]}
             >
-              Title
+              Dílo
             </Text>
           </TouchableOpacity>
           
@@ -518,7 +627,7 @@ export default function App() {
                 selectedCategories.author && styles.categoryButtonTextSelected,
               ]}
             >
-              Author
+              Autor
             </Text>
           </TouchableOpacity>
           
@@ -535,12 +644,13 @@ export default function App() {
                 selectedCategories.year && styles.categoryButtonTextSelected,
               ]}
             >
-              Year
+              Rok
             </Text>
           </TouchableOpacity>
         </View>
-        
-        <Text style={styles.subtitle}>Vyber počet kol:</Text>
+
+        {/* Počet kol */}
+        <Text style={styles.subtitle}>Počet kol:</Text>
         <View style={styles.buttonGroup}>
           {[1, 3, 7].map((num) => (
             <TouchableOpacity
@@ -557,41 +667,11 @@ export default function App() {
                   selectedRounds === num && styles.roundButtonTextSelected,
                 ]}
               >
-                {num} {num === 1 ? 'round' : 'rounds'}
+                {num} {num === 1 ? 'kolo' : num < 5 ? 'kola' : 'kol'}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
-
-        <TouchableOpacity style={styles.startButton} onPress={startQuiz}>
-          <Text style={styles.startButtonText}>START</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={[styles.startButton, { backgroundColor: '#2196F3', marginTop: 15 }]} 
-          onPress={startLearn}
-        >
-          <Text style={styles.startButtonText}>LEARN</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={styles.settingsButton} 
-          onPress={() => {
-            setTempSettings(JSON.parse(JSON.stringify(settingsData)));
-            setScreen('settings');
-          }}
-        >
-          <Text style={styles.settingsButtonText}>SETTINGS</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  // Settings obrazovka
-  if (screen === 'settings' && tempSettings) {
-    return (
-      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.title}>Nastavení</Text>
 
         <Text style={styles.subtitle}>Učebnice:</Text>
         
@@ -671,6 +751,14 @@ export default function App() {
           );
         })}
 
+        {/* Obnovit data button */}
+        <TouchableOpacity 
+          style={[styles.startButton, { backgroundColor: '#FF9800', marginHorizontal: 20, marginTop: 20 }]}
+          onPress={refreshData}
+        >
+          <Text style={styles.startButtonText}>Obnovit data</Text>
+        </TouchableOpacity>
+
         {/* Buttons */}
         <View style={styles.settingsButtons}>
           <TouchableOpacity
@@ -705,27 +793,32 @@ export default function App() {
     
     return (
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.title}>Učení ({currentLearnIndex + 1}/{learnArtworks.length})</Text>
-
+        {imageLoading && (
+          <View style={styles.imageLoader}>
+            <ActivityIndicator size="large" color="#2196F3" />
+          </View>
+        )}
         <Image
           source={{ uri: currentArtwork.picture }}
           style={styles.learnImage}
           resizeMode="contain"
+          onLoadStart={() => setImageLoading(true)}
+          onLoadEnd={() => setImageLoading(false)}
         />
 
         <View style={styles.learnInfoContainer}>
           <View style={styles.learnInfoRow}>
-            <Ionicons name="image-outline" size={24} color="#666" style={styles.learnIcon} />
+            <Ionicons name="image-outline" size={20} color="#666" style={styles.learnIcon} />
             <Text style={styles.learnInfoText}>{currentArtwork.title}</Text>
           </View>
 
           <View style={styles.learnInfoRow}>
-            <Ionicons name="person-outline" size={24} color="#666" style={styles.learnIcon} />
+            <Ionicons name="person-outline" size={20} color="#666" style={styles.learnIcon} />
             <Text style={styles.learnInfoText}>{currentArtwork.author}</Text>
           </View>
 
           <View style={styles.learnInfoRow}>
-            <Ionicons name="calendar-outline" size={24} color="#666" style={styles.learnIcon} />
+            <Ionicons name="calendar-outline" size={20} color="#666" style={styles.learnIcon} />
             <Text style={styles.learnInfoText}>
               {currentArtwork.year_start === currentArtwork.year_end 
                 ? currentArtwork.year_start 
@@ -736,20 +829,21 @@ export default function App() {
 
         <View style={styles.learnButtons}>
           <TouchableOpacity
-            style={[styles.startButton, { backgroundColor: '#757575', flex: 1, marginRight: 10 }]}
+            style={[styles.learnButton, { backgroundColor: '#757575', flex: 1, marginRight: 10 }]}
             onPress={() => {
               setScreen('home');
               setLearnArtworks([]);
               setCurrentLearnIndex(0);
             }}
           >
-            <Text style={styles.startButtonText} numberOfLines={1}>BACK</Text>
+            <Text style={styles.learnButtonText} numberOfLines={1}>MENU</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.startButton, { backgroundColor: '#4CAF50', flex: 1, marginLeft: 10 }]}
+            style={[styles.learnButton, { backgroundColor: '#4CAF50', flex: 1, marginLeft: 10 }]}
             onPress={() => {
               if (currentLearnIndex < learnArtworks.length - 1) {
+                setImageLoading(true);
                 setCurrentLearnIndex(currentLearnIndex + 1);
               } else {
                 // Poslední dílo - vrátit se na začátek nebo home
@@ -759,9 +853,7 @@ export default function App() {
               }
             }}
           >
-            <Text style={styles.startButtonText} numberOfLines={1}>
-              {currentLearnIndex < learnArtworks.length - 1 ? 'NEXT' : 'FINISH'}
-            </Text>
+            <Text style={styles.learnButtonText} numberOfLines={1}>DALŠÍ</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -843,19 +935,29 @@ export default function App() {
           </View>
         </View>
 
+        {imageLoading && (
+          <View style={styles.imageLoader}>
+            <ActivityIndicator size="large" color="#2196F3" />
+          </View>
+        )}
         <TouchableOpacity onPress={() => setImageZoomVisible(true)}>
           <Image
             source={{ uri: currentArtwork.picture }}
             style={[
               styles.artworkImage,
               {
-                height: 
-                  Object.values(selectedCategories).filter(Boolean).length === 1 ? 420 :
-                  Object.values(selectedCategories).filter(Boolean).length === 2 ? 350 :
-                  280
+                height: showAnswer ? 
+                  (Object.values(selectedCategories).filter(Boolean).length === 1 ? 480 :
+                   Object.values(selectedCategories).filter(Boolean).length === 2 ? 400 :
+                   320) :
+                  (Object.values(selectedCategories).filter(Boolean).length === 1 ? 420 :
+                   Object.values(selectedCategories).filter(Boolean).length === 2 ? 350 :
+                   280)
               }
             ]}
             resizeMode="contain"
+            onLoadStart={() => setImageLoading(true)}
+            onLoadEnd={() => setImageLoading(false)}
           />
         </TouchableOpacity>
 
@@ -972,7 +1074,7 @@ export default function App() {
             )}
 
             <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
-              <Text style={styles.submitButtonText}>SUBMIT</Text>
+              <Text style={styles.submitButtonText}>POTVRDIT</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -1084,7 +1186,7 @@ export default function App() {
             )}
 
             <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
-              <Text style={styles.nextButtonText}>NEXT</Text>
+              <Text style={styles.nextButtonText}>DALŠÍ</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -1099,20 +1201,20 @@ export default function App() {
       <View style={styles.container}>
         <Text style={styles.resultsTitle}>Tvoje skóre:</Text>
         <View style={styles.resultsContainer}>
-          <Text style={styles.resultsText}>Rounds: {selectedRounds}</Text>
+          <Text style={styles.resultsText}>Kola: {selectedRounds}</Text>
           {selectedCategories.title && (
-            <Text style={styles.resultsText}>Titles: {scores.titles}</Text>
+            <Text style={styles.resultsText}>Díla: {scores.titles}</Text>
           )}
           {selectedCategories.author && (
-            <Text style={styles.resultsText}>Authors: {scores.authors}</Text>
+            <Text style={styles.resultsText}>Autoři: {scores.authors}</Text>
           )}
           {selectedCategories.year && (
-            <Text style={styles.resultsText}>Years: {scores.years}</Text>
+            <Text style={styles.resultsText}>Roky (odchylka): {scores.years}</Text>
           )}
         </View>
 
         <TouchableOpacity style={styles.startButton} onPress={resetQuiz}>
-          <Text style={styles.startButtonText}>NOVÁ HRA</Text>
+          <Text style={styles.startButtonText}>MENU</Text>
         </TouchableOpacity>
       </View>
     );
@@ -1145,6 +1247,23 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 20,
     color: '#333',
+  },
+  homeHeader: {
+    alignItems: 'flex-end',
+    paddingRight: 20,
+    paddingTop: 10,
+  },
+  settingsIcon: {
+    padding: 10,
+  },
+  homeCenter: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  homeBottom: {
+    paddingHorizontal: 20,
+    paddingBottom: 50,
   },
   subtitle: {
     fontSize: 20,
@@ -1227,7 +1346,7 @@ const styles = StyleSheet.create({
   scoreText: {
     fontSize: 16,
     marginVertical: 2,
-    color: '#333',
+    color: '#666',
   },
   artworkImage: {
     width: '90%',
@@ -1470,22 +1589,30 @@ const styles = StyleSheet.create({
   },
   learnImage: {
     width: '90%',
-    height: 350,
+    height: 380,
     alignSelf: 'center',
-    marginBottom: 30,
+    marginBottom: 15,
+    marginTop: 10,
     borderRadius: 10,
+  },
+  imageLoader: {
+    position: 'absolute',
+    top: '30%',
+    left: '50%',
+    marginLeft: -20,
+    zIndex: 1,
   },
   learnInfoContainer: {
     paddingHorizontal: 20,
-    marginBottom: 30,
+    marginBottom: 15,
   },
   learnInfoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 10,
     backgroundColor: '#fff',
-    padding: 15,
-    borderRadius: 10,
+    padding: 12,
+    borderRadius: 8,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -1493,10 +1620,10 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
   },
   learnIcon: {
-    marginRight: 15,
+    marginRight: 10,
   },
   learnInfoText: {
-    fontSize: 18,
+    fontSize: 16,
     color: '#333',
     flex: 1,
   },
@@ -1505,6 +1632,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     marginTop: 20,
     marginBottom: 40,
+  },
+  learnButton: {
+    paddingVertical: 15,
+    borderRadius: 10,
+  },
+  learnButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
   resultsTitle: {
     fontSize: 32,
