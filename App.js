@@ -322,6 +322,14 @@ export default function App() {
               );
               
               await loadSettings();
+              
+              // Uložit aktuální nastavení a vrátit se na home
+              await saveSettings(tempSettings);
+              setScreen('home');
+              setTempSettings(null);
+              setOriginalSettings(null);
+              setExpandedTextbooks({});
+              
               Alert.alert('Hotovo', 'Data byla aktualizována');
             } catch (error) {
               console.error('Chyba při stahování dat:', error);
@@ -759,7 +767,7 @@ export default function App() {
               setExpandedTextbooks({});
             }}
           >
-            <Text style={styles.startButtonText} numberOfLines={1}>NEUKLÁDAT</Text>
+            <Text style={[styles.startButtonText, { fontSize: 14 }]} numberOfLines={1}>NEUKLÁDAT</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -771,7 +779,7 @@ export default function App() {
               setExpandedTextbooks({});
             }}
           >
-            <Text style={styles.startButtonText} numberOfLines={1}>ULOŽIT</Text>
+            <Text style={[styles.startButtonText, { fontSize: 14 }]} numberOfLines={1}>ULOŽIT</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -1228,6 +1236,39 @@ export default function App() {
 
     const overallPercent = activeCategories > 0 ? Math.round(totalPercentage / activeCategories) : 0;
 
+    // Hodnocení podle procent
+    let evaluationText = '';
+    let evaluationImage = null;
+    
+    if (overallPercent >= 95) {
+      evaluationText = 'Dotkl/a ses geniality!';
+      evaluationImage = require('./pictures/95.jpg');
+    } else if (overallPercent >= 90) {
+      evaluationText = 'Transcendentní výkon.';
+      evaluationImage = require('./pictures/90.jpg');
+    } else if (overallPercent >= 80) {
+      evaluationText = 'Sebevědomý postup vpřed.';
+      evaluationImage = require('./pictures/80.jpg');
+    } else if (overallPercent >= 65) {
+      evaluationText = 'Roztočil/a jsi to pěkně.';
+      evaluationImage = require('./pictures/65.jpg');
+    } else if (overallPercent >= 50) {
+      evaluationText = 'Hmm... něco tam je.';
+      evaluationImage = require('./pictures/50.jpg');
+    } else if (overallPercent >= 40) {
+      evaluationText = 'Některé otázky zabolely.';
+      evaluationImage = require('./pictures/40.jpg');
+    } else if (overallPercent >= 30) {
+      evaluationText = 'Test tě trochu pohltil.';
+      evaluationImage = require('./pictures/30.jpg');
+    } else if (overallPercent >= 20) {
+      evaluationText = 'Trochu ses ztratil/a.';
+      evaluationImage = require('./pictures/20.jpg');
+    } else {
+      evaluationText = 'Koncept byl odvážný.';
+      evaluationImage = require('./pictures/0.jpg');
+    }
+
     return (
       <View style={styles.container}>
         <Text style={styles.resultsTitle}>Tvoje skóre:</Text>
@@ -1243,6 +1284,16 @@ export default function App() {
             <Text style={styles.resultsText}>Roky (odchylka): {scores.years} ({yearsPercent} %)</Text>
           )}
           <Text style={[styles.resultsText, { fontWeight: 'bold', marginTop: 10 }]}>Celkem: {overallPercent} %</Text>
+        </View>
+
+        {/* Hodnocení */}
+        <View style={styles.evaluationContainer}>
+          <Image 
+            source={evaluationImage}
+            style={styles.evaluationImage}
+            resizeMode="contain"
+          />
+          <Text style={styles.evaluationText}>{evaluationText}</Text>
         </View>
 
         <TouchableOpacity style={styles.startButton} onPress={resetQuiz}>
@@ -1677,28 +1728,46 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   resultsTitle: {
-    fontSize: 32,
+    fontSize: 24,
     fontWeight: 'bold',
     textAlign: 'center',
-    marginBottom: 30,
+    marginBottom: 15,
+    marginTop: 10,
     color: '#333',
   },
   resultsContainer: {
     backgroundColor: '#fff',
-    padding: 30,
+    padding: 15,
     marginHorizontal: 20,
-    borderRadius: 15,
+    borderRadius: 10,
     elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 6,
-    marginBottom: 40,
+    marginBottom: 15,
   },
   resultsText: {
-    fontSize: 24,
-    marginVertical: 10,
+    fontSize: 18,
+    marginVertical: 5,
     color: '#333',
     fontWeight: '600',
+  },
+  evaluationContainer: {
+    alignItems: 'center',
+    marginHorizontal: 20,
+    marginBottom: 15,
+  },
+  evaluationImage: {
+    width: 250,
+    height: 250,
+    marginBottom: 10,
+  },
+  evaluationText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 15,
   },
 });
