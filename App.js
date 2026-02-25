@@ -166,7 +166,8 @@ export default function App() {
           `INSERT INTO artworks (id, title, title_en, author, author_en, year_start, year_end, picture, textbook, note, note_en, is_active) VALUES 
           ('SA-1', 'Kleobis a Bitón', 'Kleobis and Biton', 'Polymédés z Argu', 'Polymedes of Argos', -580, -580, 'https://raw.githubusercontent.com/4Tomek/art_images/main/images/Sochařství_Antika_Kleobis_and_Biton_Polymedes.jpg', 'Sochařství Antika', 'Dvě archaické mramorové sochy (kúroi) připisované Polymédovi z Argu. Představují bratry, kteří podle legendy zemřeli v naprostém štěstí poté, co vlastními silami dotáhli vůz své matky k chrámu. Delfy, Archeologické muzeum.', 'Two archaic marble statues (kouroi) attributed to Polymedes of Argos. They represent brothers who, according to legend, died in total happiness after pulling their mother''s chariot to the temple themselves. Delphi, Archaeological Museum.', 1),
           ('SA-2', 'Vozataj z Delf', 'Charioteer of Delphi', 'Sotadés z Thespií ?', 'Sotades of Thespiae ?', -478, -474, 'https://raw.githubusercontent.com/4Tomek/art_images/main/images/Sochařství_Antika_Charioteer_of_Delphi_Joy_of_Museums_2.jpg', 'Sochařství Antika', 'Jedna z nejvýznamnějších dochovaných řeckých bronzových soch. Představuje vítěze závodů v Delfách v tzv. přísném stylu. Původně byla součástí většího sousoší s vozem a koňmi. Bronz, výška 180 cm. Delfy, Archeologické muzeum.', 'One of the most important surviving Greek bronze statues. It represents a chariot race winner in Delphi in the so-called Severe style. It was originally part of a larger group with a chariot and horses. Bronze, height 180 cm. Delphi, Archaeological Museum.', 1),
-          ('SA-3', 'Diskobolos', 'Discobolus', 'Myrón', 'Myron', -460, -450, 'https://raw.githubusercontent.com/4Tomek/art_images/main/images/Sochařství_Antika_Discobolo.jpg', 'Sochařství Antika', 'Klasické řecké dílo zachycující atleta v okamžiku maximálního napětí těsně před odhozením disku. Originál byl bronzový, dochovaly se pouze římské mramorové kopie. Příklad raného realismu v pohybu. Národní muzeum, Řím.', 'A classical Greek work capturing an athlete at the moment of maximum tension just before throwing the disc. The original was bronze, only Roman marble copies have survived. An example of early realism in movement. National Museum, Rome.', 1)`     );
+          ('SA-3', 'Diskobolos', 'Discobolus', 'Myrón', 'Myron', -460, -450, 'https://raw.githubusercontent.com/4Tomek/art_images/main/images/Sochařství_Antika_Discobolo.jpg', 'Sochařství Antika', 'Klasické řecké dílo zachycující atleta v okamžiku maximálního napětí těsně před odhozením disku. Originál byl bronzový, dochovaly se pouze římské mramorové kopie. Příklad raného realismu v pohybu. Národní muzeum, Řím.', 'A classical Greek work capturing an athlete at the moment of maximum tension just before throwing the disc. The original was bronze, only Roman marble copies have survived. An example of early realism in movement. National Museum, Rome.', 1)`
+        );
         console.log('Data artworks byla vložena do databáze');
       }
 
@@ -327,8 +328,35 @@ export default function App() {
               
               await loadSettings();
               
-              // Uložit aktuální nastavení a znovu načíst Settings
-              await saveSettings(tempSettings);
+              // Znovu načíst tempSettings s novými učebnicemi
+              const newSettings = await db.getAllAsync('SELECT * FROM settings WHERE id = 1');
+              const s = newSettings[0];
+              const newTextbooks = JSON.parse(s.textbooks);
+              const newActiveTextbooks = JSON.parse(s.active_textbooks);
+
+              // Načíst artworks po učebnicích
+              const newArtworksByTextbook = {};
+              for (const textbook of newTextbooks) {
+                const artworks = await db.getAllAsync(
+                  'SELECT * FROM artworks WHERE textbook = ?',
+                  [textbook]
+                );
+                newArtworksByTextbook[textbook] = artworks;
+              }
+
+              // Aktualizovat tempSettings
+              setTempSettings({
+                textbooks: newTextbooks,
+                activeTextbooks: newActiveTextbooks,
+                artworksByTextbook: newArtworksByTextbook,
+              });
+              
+              // Uložit aktuální nastavení
+              await saveSettings({
+                textbooks: newTextbooks,
+                activeTextbooks: newActiveTextbooks,
+                artworksByTextbook: newArtworksByTextbook,
+              });
               
               Alert.alert('Hotovo', 'Data byla aktualizována');
             } catch (error) {
@@ -794,7 +822,7 @@ export default function App() {
         {/* Buttons */}
         <View style={styles.settingsButtons}>
           <TouchableOpacity
-            style={[styles.startButton, { backgroundColor: '#757575', flex: 1, marginRight: 10 }]}
+            style={[styles.startButton, { backgroundColor: '#757575', flex: 1, marginRight: 5, paddingHorizontal: 8 }]}
             onPress={() => {
               // Vrátit původní stav
               if (originalSettings) {
@@ -808,11 +836,11 @@ export default function App() {
               setExpandedTextbooks({});
             }}
           >
-            <Text style={[styles.startButtonText, { fontSize: 14 }]} numberOfLines={1}>NEUKLÁDAT</Text>
+            <Text style={[styles.startButtonText, { fontSize: 13 }]} numberOfLines={1}>NEUKLÁDAT</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.startButton, { backgroundColor: '#4CAF50', flex: 1, marginLeft: 10 }]}
+            style={[styles.startButton, { backgroundColor: '#4CAF50', flex: 1, marginLeft: 5, paddingHorizontal: 8 }]}
             onPress={async () => {
               await saveSettings(tempSettings);
               setScreen('home');
@@ -820,7 +848,7 @@ export default function App() {
               setExpandedTextbooks({});
             }}
           >
-            <Text style={[styles.startButtonText, { fontSize: 14 }]} numberOfLines={1}>ULOŽIT</Text>
+            <Text style={[styles.startButtonText, { fontSize: 13 }]} numberOfLines={1}>ULOŽIT</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -1743,7 +1771,7 @@ const styles = StyleSheet.create({
   },
   settingsButtons: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
+    paddingHorizontal: 10,
     marginTop: 20,
     marginBottom: 40,
   },
