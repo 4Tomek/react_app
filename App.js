@@ -47,6 +47,7 @@ const wordsMatch = (userAnswer, correctAnswer) => {
 export default function App() {
   const [screen, setScreen] = useState('home'); // 'home', 'quiz', 'results', 'settings', 'learn'
   const [selectedRounds, setSelectedRounds] = useState(3);
+  const [isEnglish, setIsEnglish] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState({
     title: true,
     author: true,
@@ -62,6 +63,8 @@ export default function App() {
   const [expandedTextbooks, setExpandedTextbooks] = useState({});
   const [learnArtworks, setLearnArtworks] = useState([]);
   const [currentLearnIndex, setCurrentLearnIndex] = useState(0);
+  const [showNoteInLearn, setShowNoteInLearn] = useState(false);
+  const [showNoteInQuiz, setShowNoteInQuiz] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
   const [currentRound, setCurrentRound] = useState(1);
   const [currentArtwork, setCurrentArtwork] = useState(null);
@@ -128,12 +131,15 @@ export default function App() {
         CREATE TABLE IF NOT EXISTS artworks (
           id TEXT PRIMARY KEY,
           title TEXT NOT NULL,
+          title_en TEXT NOT NULL,
           author TEXT NOT NULL,
+          author_en TEXT NOT NULL,
           year_start INTEGER NOT NULL,
           year_end INTEGER NOT NULL,
           picture TEXT NOT NULL,
           textbook TEXT NOT NULL,
-          chapter INTEGER NOT NULL,
+          note TEXT NOT NULL,
+          note_en TEXT NOT NULL,
           is_active INTEGER NOT NULL
         );
       `);
@@ -146,7 +152,8 @@ export default function App() {
           rows TEXT NOT NULL,
           active_rows TEXT NOT NULL,
           textbooks TEXT NOT NULL,
-          active_textbooks TEXT NOT NULL
+          active_textbooks TEXT NOT NULL,
+          english INTEGER NOT NULL
         );
       `);
 
@@ -156,18 +163,10 @@ export default function App() {
       if (artworksResult[0].count === 0) {
         // Vložení počátečních dat do artworks
         await db.runAsync(
-          `INSERT INTO artworks (id, title, author, year_start, year_end, picture, textbook, chapter, is_active) VALUES 
-          ('1-1', 'Portrét Arnolfiniho', 'Jan van Eyck', 1434, 1434, 'https://github.com/4Tomek/art_images/releases/download/v1.0/portret_arnolfiniho.jpg', 'Basic Textbook', 1, 1),
-          ('1-2', 'Zrození Venuše', 'Sandro Botticelli', 1484, 1486, 'https://github.com/4Tomek/art_images/releases/download/v1.0/zrozeni_venuse.jpg', 'Basic Textbook', 1, 1),
-          ('1-3', 'Mona Lisa', 'Leonardo da Vinci', 1503, 1506, 'https://github.com/4Tomek/art_images/releases/download/v1.0/mona_lisa.jpg', 'Basic Textbook', 1, 1),
-          ('1-4', 'Dívka s perlou', 'Johannes Vermeer', 1665, 1665, 'https://github.com/4Tomek/art_images/releases/download/v1.0/divka_s_perlou.jpg', 'Basic Textbook', 1, 1),
-          ('1-5', 'Hvězdná noc', 'Vincent van Gogh', 1889, 1889, 'https://github.com/4Tomek/art_images/releases/download/v1.0/hvezdna_noc.jpg', 'Basic Textbook', 1, 1),
-          ('1-6', 'Výkřik', 'Edvard Munch', 1893, 1893, 'https://github.com/4Tomek/art_images/releases/download/v1.0/vykrik.jpg', 'Basic Textbook', 1, 1),
-          ('1-7', 'Kompozice A', 'Piet Mondrian', 1920, 1920, 'https://github.com/4Tomek/art_images/releases/download/v1.0/composition_a.jpg', 'Basic Textbook', 1, 1),
-          ('2-1', 'Polibek', 'Gustav Klimt', 1907, 1908, 'https://github.com/4Tomek/art_images/releases/download/v1.0/polibek.jpg', 'Textbook 1', 1, 1),
-          ('2-2', 'Kristus nesoucí kříž', 'El Greco', 1580, 1585, 'https://github.com/4Tomek/art_images/releases/download/v1.0/kristus_nesouci_kriz.jpg', 'Textbook 1', 1, 1),
-          ('2-3', 'Sixtinská madona', 'Raffaello Santi', 1512, 1513, 'https://github.com/4Tomek/art_images/releases/download/v1.0/sixtinska_madona.jpg', 'Textbook 1', 1, 1)`
-        );
+          `INSERT INTO artworks (id, title, title_en, author, author_en, year_start, year_end, picture, textbook, note, note_en, is_active) VALUES 
+          ('SA-1', 'Kleobis a Bitón', 'Kleobis and Biton', 'Polymédés z Argu', 'Polymedes of Argos', -580, -580, 'https://raw.githubusercontent.com/4Tomek/art_images/main/images/Sochařství_Antika_Kleobis_and_Biton_Polymedes.jpg', 'Sochařství Antika', 'Dvě archaické mramorové sochy (kúroi) připisované Polymédovi z Argu. Představují bratry, kteří podle legendy zemřeli v naprostém štěstí poté, co vlastními silami dotáhli vůz své matky k chrámu. Delfy, Archeologické muzeum.', 'Two archaic marble statues (kouroi) attributed to Polymedes of Argos. They represent brothers who, according to legend, died in total happiness after pulling their mother''s chariot to the temple themselves. Delphi, Archaeological Museum.', 1),
+          ('SA-2', 'Vozataj z Delf', 'Charioteer of Delphi', 'Sotadés z Thespií ?', 'Sotades of Thespiae ?', -478, -474, 'https://raw.githubusercontent.com/4Tomek/art_images/main/images/Sochařství_Antika_Charioteer_of_Delphi_Joy_of_Museums_2.jpg', 'Sochařství Antika', 'Jedna z nejvýznamnějších dochovaných řeckých bronzových soch. Představuje vítěze závodů v Delfách v tzv. přísném stylu. Původně byla součástí většího sousoší s vozem a koňmi. Bronz, výška 180 cm. Delfy, Archeologické muzeum.', 'One of the most important surviving Greek bronze statues. It represents a chariot race winner in Delphi in the so-called Severe style. It was originally part of a larger group with a chariot and horses. Bronze, height 180 cm. Delphi, Archaeological Museum.', 1),
+          ('SA-3', 'Diskobolos', 'Discobolus', 'Myrón', 'Myron', -460, -450, 'https://raw.githubusercontent.com/4Tomek/art_images/main/images/Sochařství_Antika_Discobolo.jpg', 'Sochařství Antika', 'Klasické řecké dílo zachycující atleta v okamžiku maximálního napětí těsně před odhozením disku. Originál byl bronzový, dochovaly se pouze římské mramorové kopie. Příklad raného realismu v pohybu. Národní muzeum, Řím.', 'A classical Greek work capturing an athlete at the moment of maximum tension just before throwing the disc. The original was bronze, only Roman marble copies have survived. An example of early realism in movement. National Museum, Rome.', 1)`     );
         console.log('Data artworks byla vložena do databáze');
       }
 
@@ -177,8 +176,8 @@ export default function App() {
       if (settingsResult[0].count === 0) {
         // Vložení výchozích nastavení
         await db.runAsync(
-          `INSERT INTO settings (id, rounds, rows, active_rows, textbooks, active_textbooks) VALUES 
-          (1, 3, '["Title","Author","Year"]', '[1,1,1]', '["Basic Textbook","Textbook 1"]', '[1,0]')`
+          `INSERT INTO settings (id, rounds, rows, active_rows, textbooks, active_textbooks, english) VALUES 
+          (1, 3, '["Title","Author","Year"]', '[1,1,1]', '["Sochařství Antika"]', '[1]', 0)`
         );
         console.log('Výchozí nastavení bylo vloženo do databáze');
       }
@@ -204,6 +203,7 @@ export default function App() {
         const activeRows = JSON.parse(s.active_rows);
         
         setSelectedRounds(s.rounds);
+        setIsEnglish(s.english === 1);
         setSelectedCategories({
           title: activeRows[0] === 1,
           author: activeRows[1] === 1,
@@ -243,9 +243,10 @@ export default function App() {
         `UPDATE settings SET 
           rounds = ?, 
           active_rows = ?, 
-          active_textbooks = ? 
+          active_textbooks = ?,
+          english = ?
         WHERE id = 1`,
-        [selectedRounds, JSON.stringify(activeRows), JSON.stringify(tempData.activeTextbooks)]
+        [selectedRounds, JSON.stringify(activeRows), JSON.stringify(tempData.activeTextbooks), isEnglish ? 1 : 0]
       );
 
       // Uložení is_active pro artworks
@@ -298,17 +299,20 @@ export default function App() {
                   
                   // Vložit nové dílo
                   await db.runAsync(
-                    `INSERT INTO artworks (id, title, author, year_start, year_end, picture, textbook, chapter, is_active) 
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    `INSERT INTO artworks (id, title, title_en, author, author_en, year_start, year_end, picture, textbook, note, note_en, is_active) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                     [
                       item.id,
                       item.title,
+                      item.title_en,
                       item.artist,
+                      item.artist_en,
                       item.year_start,
                       item.year_end,
                       item.image_url,
                       item.category,
-                      item.level,
+                      item.note,
+                      item.note_en,
                       item.is_active
                     ]
                   );
@@ -323,12 +327,8 @@ export default function App() {
               
               await loadSettings();
               
-              // Uložit aktuální nastavení a vrátit se na home
+              // Uložit aktuální nastavení a znovu načíst Settings
               await saveSettings(tempSettings);
-              setScreen('home');
-              setTempSettings(null);
-              setOriginalSettings(null);
-              setExpandedTextbooks({});
               
               Alert.alert('Hotovo', 'Data byla aktualizována');
             } catch (error) {
@@ -499,6 +499,7 @@ export default function App() {
   const handleNext = async () => {
     const newUsedIds = [...usedIds, currentArtwork.id];
     setUsedIds(newUsedIds);
+    setShowNoteInQuiz(false);
 
     if (currentRound < selectedRounds) {
       setCurrentRound(currentRound + 1);
@@ -545,7 +546,8 @@ export default function App() {
               setTempSettings(JSON.parse(JSON.stringify(settingsData)));
               setOriginalSettings({
                 categories: { ...selectedCategories },
-                rounds: selectedRounds
+                rounds: selectedRounds,
+                english: isEnglish
               });
               setScreen('settings');
             }}
@@ -659,6 +661,44 @@ export default function App() {
           ))}
         </View>
 
+        {/* Jazyk */}
+        <Text style={[styles.subtitle, { fontSize: 16 }]}>Jazyk:</Text>
+        <View style={styles.buttonGroup}>
+          <TouchableOpacity
+            style={[
+              styles.categoryButton,
+              !isEnglish && styles.categoryButtonSelected,
+            ]}
+            onPress={() => setIsEnglish(false)}
+          >
+            <Text
+              style={[
+                styles.categoryButtonText,
+                !isEnglish && styles.categoryButtonTextSelected,
+              ]}
+            >
+              Česky
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[
+              styles.categoryButton,
+              isEnglish && styles.categoryButtonSelected,
+            ]}
+            onPress={() => setIsEnglish(true)}
+          >
+            <Text
+              style={[
+                styles.categoryButtonText,
+                isEnglish && styles.categoryButtonTextSelected,
+              ]}
+            >
+              English
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         <Text style={[styles.subtitle, { fontSize: 16 }]}>Učebnice:</Text>
         
         {tempSettings.textbooks.map((textbook, index) => {
@@ -760,6 +800,7 @@ export default function App() {
               if (originalSettings) {
                 setSelectedCategories(originalSettings.categories);
                 setSelectedRounds(originalSettings.rounds);
+                setIsEnglish(originalSettings.english);
               }
               setScreen('home');
               setTempSettings(null);
@@ -808,12 +849,12 @@ export default function App() {
         <View style={styles.learnInfoContainer}>
           <View style={styles.learnInfoRow}>
             <Ionicons name="image-outline" size={20} color="#666" style={styles.learnIcon} />
-            <Text style={styles.learnInfoText}>{currentArtwork.title}</Text>
+            <Text style={styles.learnInfoText}>{isEnglish ? currentArtwork.title_en : currentArtwork.title}</Text>
           </View>
 
           <View style={styles.learnInfoRow}>
             <Ionicons name="person-outline" size={20} color="#666" style={styles.learnIcon} />
-            <Text style={styles.learnInfoText}>{currentArtwork.author}</Text>
+            <Text style={styles.learnInfoText}>{isEnglish ? currentArtwork.author_en : currentArtwork.author}</Text>
           </View>
 
           <View style={styles.learnInfoRow}>
@@ -824,6 +865,22 @@ export default function App() {
                 : `${currentArtwork.year_start}-${currentArtwork.year_end}`}
             </Text>
           </View>
+
+          {/* Info button */}
+          <TouchableOpacity 
+            style={styles.infoButton}
+            onPress={() => setShowNoteInLearn(!showNoteInLearn)}
+          >
+            <Ionicons name="information-circle-outline" size={24} color="#2196F3" />
+            <Text style={styles.infoButtonText}>Info</Text>
+          </TouchableOpacity>
+
+          {/* Note */}
+          {showNoteInLearn && (
+            <View style={styles.noteContainer}>
+              <Text style={styles.noteText}>{isEnglish ? currentArtwork.note_en : currentArtwork.note}</Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.learnButtons}>
@@ -833,6 +890,7 @@ export default function App() {
               setScreen('home');
               setLearnArtworks([]);
               setCurrentLearnIndex(0);
+              setShowNoteInLearn(false);
             }}
           >
             <Text style={styles.learnButtonText} numberOfLines={1}>MENU</Text>
@@ -843,12 +901,14 @@ export default function App() {
             onPress={() => {
               if (currentLearnIndex < learnArtworks.length - 1) {
                 setImageLoading(true);
+                setShowNoteInLearn(false);
                 setCurrentLearnIndex(currentLearnIndex + 1);
               } else {
                 // Poslední dílo - vrátit se na začátek nebo home
                 setScreen('home');
                 setLearnArtworks([]);
                 setCurrentLearnIndex(0);
+                setShowNoteInLearn(false);
               }
             }}
           >
@@ -1087,16 +1147,16 @@ export default function App() {
                 >
                   <View style={styles.answerItemLeft}>
                     <Ionicons name="image-outline" size={20} color="#666" style={styles.answerIcon} />
-                    <Text style={styles.answerItemText}>{currentArtwork.title}</Text>
+                    <Text style={styles.answerItemText}>{isEnglish ? currentArtwork.title_en : currentArtwork.title}</Text>
                   </View>
                   <View style={styles.answerItemRight}>
                     <Ionicons 
-                      name={titleInput.trim() && wordsMatch(titleInput.trim(), currentArtwork.title) 
+                      name={titleInput.trim() && wordsMatch(titleInput.trim(), isEnglish ? currentArtwork.title_en : currentArtwork.title) 
                         ? "checkmark-circle" 
                         : "close-circle"
                       } 
                       size={20} 
-                      color={titleInput.trim() && wordsMatch(titleInput.trim(), currentArtwork.title) 
+                      color={titleInput.trim() && wordsMatch(titleInput.trim(), isEnglish ? currentArtwork.title_en : currentArtwork.title) 
                         ? "#4CAF50" 
                         : "#F44336"
                       } 
@@ -1123,16 +1183,16 @@ export default function App() {
                 >
                   <View style={styles.answerItemLeft}>
                     <Ionicons name="person-outline" size={20} color="#666" style={styles.answerIcon} />
-                    <Text style={styles.answerItemText}>{currentArtwork.author}</Text>
+                    <Text style={styles.answerItemText}>{isEnglish ? currentArtwork.author_en : currentArtwork.author}</Text>
                   </View>
                   <View style={styles.answerItemRight}>
                     <Ionicons 
-                      name={authorInput.trim() && wordsMatch(authorInput.trim(), currentArtwork.author) 
+                      name={authorInput.trim() && wordsMatch(authorInput.trim(), isEnglish ? currentArtwork.author_en : currentArtwork.author) 
                         ? "checkmark-circle" 
                         : "close-circle"
                       } 
                       size={20} 
-                      color={authorInput.trim() && wordsMatch(authorInput.trim(), currentArtwork.author) 
+                      color={authorInput.trim() && wordsMatch(authorInput.trim(), isEnglish ? currentArtwork.author_en : currentArtwork.author) 
                         ? "#4CAF50" 
                         : "#F44336"
                       } 
@@ -1181,6 +1241,22 @@ export default function App() {
                     <Text style={styles.userAnswerText}>{yearInput || '-'}</Text>
                   </View>
                 )}
+              </View>
+            )}
+
+            {/* Info button */}
+            <TouchableOpacity 
+              style={styles.infoButton}
+              onPress={() => setShowNoteInQuiz(!showNoteInQuiz)}
+            >
+              <Ionicons name="information-circle-outline" size={24} color="#2196F3" />
+              <Text style={styles.infoButtonText}>Info</Text>
+            </TouchableOpacity>
+
+            {/* Note */}
+            {showNoteInQuiz && (
+              <View style={styles.noteContainer}>
+                <Text style={styles.noteText}>{isEnglish ? currentArtwork.note_en : currentArtwork.note}</Text>
               </View>
             )}
 
@@ -1769,5 +1845,32 @@ const styles = StyleSheet.create({
     color: '#333',
     textAlign: 'center',
     marginBottom: 15,
+  },
+  infoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    padding: 10,
+    borderRadius: 8,
+    marginTop: 15,
+    marginBottom: 10,
+  },
+  infoButtonText: {
+    marginLeft: 8,
+    fontSize: 16,
+    color: '#2196F3',
+    fontWeight: '600',
+  },
+  noteContainer: {
+    backgroundColor: '#E3F2FD',
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 15,
+  },
+  noteText: {
+    fontSize: 14,
+    color: '#333',
+    lineHeight: 20,
   },
 });
