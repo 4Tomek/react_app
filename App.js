@@ -16,8 +16,171 @@ import {
 import * as SQLite from 'expo-sqlite';
 import { Ionicons } from '@expo/vector-icons';
 
-// Otevření databáze
-const db = SQLite.openDatabaseSync('artworks.db');
+// Podmíněná inicializace databáze (pouze pro mobil)
+const db = Platform.OS !== 'web' ? SQLite.openDatabaseSync('artworks.db') : null;
+
+// Mock data pro web
+const WEB_INITIAL_DATA = [
+  {
+    id: 'SA-1',
+    title: 'Kleobis a Bitón',
+    title_en: 'Kleobis and Biton',
+    author: 'Polymédés z Argu',
+    author_en: 'Polymedes of Argos',
+    year_start: -580,
+    year_end: -580,
+    picture: 'https://raw.githubusercontent.com/4Tomek/art_images/main/images/Sochařství_Antika_Kleobis_and_Biton_Polymedes.jpg',
+    textbook: 'Sochařství Antika',
+    note: 'Dvě archaické mramorové sochy (kúroi) připisované Polymédovi z Argu. Představují bratry, kteří podle legendy zemřeli v naprostém štěstí poté, co vlastními silami dotáhli vůz své matky k chrámu. Delfy, Archeologické muzeum.',
+    note_en: 'Two archaic marble statues (kouroi) attributed to Polymedes of Argos. They represent brothers who, according to legend, died in total happiness after pulling their mother\'s chariot to the temple themselves. Delphi, Archaeological Museum.',
+    is_active: 1
+  },
+  {
+    id: 'SA-2',
+    title: 'Vozataj z Delf',
+    title_en: 'Charioteer of Delphi',
+    author: 'Sotadés z Thespií ?',
+    author_en: 'Sotades of Thespiae ?',
+    year_start: -478,
+    year_end: -474,
+    picture: 'https://raw.githubusercontent.com/4Tomek/art_images/main/images/Sochařství_Antika_Charioteer_of_Delphi_Joy_of_Museums_2.jpg',
+    textbook: 'Sochařství Antika',
+    note: 'Jedna z nejvýznamnějších dochovaných řeckých bronzových soch. Představuje vítěze závodů v Delfách v tzv. přísném stylu. Původně byla součástí většího sousoší s vozem a koňmi. Bronz, výška 180 cm. Delfy, Archeologické muzeum.',
+    note_en: 'One of the most important surviving Greek bronze statues. It represents a chariot race winner in Delphi in the so-called Severe style. It was originally part of a larger group with a chariot and horses. Bronze, height 180 cm. Delphi, Archaeological Museum.',
+    is_active: 1
+  },
+  {
+    id: 'SA-3',
+    title: 'Diskobolos',
+    title_en: 'Discobolus',
+    author: 'Myrón',
+    author_en: 'Myron',
+    year_start: -460,
+    year_end: -450,
+    picture: 'https://raw.githubusercontent.com/4Tomek/art_images/main/images/Sochařství_Antika_Discobolo.jpg',
+    textbook: 'Sochařství Antika',
+    note: 'Klasické řecké dílo zachycující atleta v okamžiku maximálního napětí těsně před odhozením disku. Originál byl bronzový, dochovaly se pouze římské mramorové kopie. Příklad raného realismu v pohybu. Národní muzeum, Řím.',
+    note_en: 'A classical Greek work capturing an athlete at the moment of maximum tension just before throwing the disc. The original was bronze, only Roman marble copies have survived. An example of early realism in movement. National Museum, Rome.',
+    is_active: 1
+  }
+];
+
+// Web storage pro simulaci databáze
+let webArtworks = [...WEB_INITIAL_DATA];
+let webSettings = {
+  rounds: 3,
+  rows: JSON.stringify(['Title', 'Author', 'Year']),
+  active_rows: JSON.stringify([1, 1, 1]),
+  textbooks: JSON.stringify(['Sochařství Antika']),
+  active_textbooks: JSON.stringify([1]),
+  english: 0
+};
+
+// Database wrapper - funguje na webu i mobilu
+const dbWrapper = {
+  // Provádění SQL příkazů (CREATE TABLE, INSERT atd.)
+  execAsync: async (sql) => {
+    if (Platform.OS === 'web') {
+      console.log('[Web] Skipping SQL exec:', sql.substring(0, 50) + '...');
+      return;
+    }
+    return db.execAsync(sql);
+  },
+  
+  // SELECT dotazy
+  getAllAsync: async (query, params = []) => {
+    if (Platform.OS === 'web') {
+      console.log('[Web] Mock query:', query);
+      
+      // Simulace SELECT * FROM settings
+      if (query.includes('SELECT') && query.includes('settings')) {
+        return [{
+          id: 1,
+          rounds: webSettings.rounds,
+          rows: webSettings.rows,
+          active_rows: webSettings.active_rows,
+          textbooks: webSettings.textbooks,
+          active_textbooks: webSettings.active_textbooks,
+          english: webSettings.english
+        }];
+      }
+      
+      // Simulace SELECT COUNT
+      if (query.includes('COUNT')) {
+        if (query.includes('artworks')) {
+          return [{ count: webArtworks.length }];
+        }
+        if (query.includes('settings')) {
+          return [{ count: 1 }];
+        }
+      }
+      
+      // Simulace SELECT * FROM artworks
+      if (query.includes('SELECT') && query.includes('artworks')) {
+        let results = [...webArtworks];
+        
+        // Filter WHERE textbook = ?
+        if (query.includes('WHERE textbook')) {
+          const textbook = params[0];
+          results = results.filter(a => a.textbook === textbook);
+        }
+        
+        // Filter WHERE is_active = 1
+        if (query.includes('is_active = 1')) {
+          results = results.filter(a => a.is_active === 1);
+        }
+        
+        // Filter NOT IN (used IDs)
+        if (query.includes('NOT IN')) {
+          const usedIds = params;
+          results = results.filter(a => !usedIds.includes(a.id));
+        }
+        
+        return results;
+      }
+      
+      return [];
+    }
+    return db.getAllAsync(query, params);
+  },
+  
+  // INSERT, UPDATE, DELETE
+  runAsync: async (query, params = []) => {
+    if (Platform.OS === 'web') {
+      console.log('[Web] Mock run:', query.substring(0, 80));
+      
+      // UPDATE settings
+      if (query.includes('UPDATE settings')) {
+        if (query.includes('rounds')) webSettings.rounds = params[0];
+        if (query.includes('active_rows')) webSettings.active_rows = params[0];
+        if (query.includes('textbooks')) {
+          webSettings.textbooks = params[0];
+          if (params[1]) webSettings.active_textbooks = params[1];
+        }
+        if (query.includes('english')) webSettings.english = params[params.length - 1];
+        return;
+      }
+      
+      // UPDATE artworks
+      if (query.includes('UPDATE artworks')) {
+        const isActive = params[0];
+        const id = params[1];
+        const artwork = webArtworks.find(a => a.id === id);
+        if (artwork) artwork.is_active = isActive;
+        return;
+      }
+      
+      // INSERT artworks
+      if (query.includes('INSERT INTO artworks')) {
+        // Mock - data jsou už v WEB_INITIAL_DATA
+        return;
+      }
+      
+      return;
+    }
+    return db.runAsync(query, params);
+  }
+};
 
 // Funkce pro odstranění diakritiky
 const removeDiacritics = (str) => {
@@ -115,7 +278,7 @@ export default function App() {
         selectedCategories.author ? 1 : 0,
         selectedCategories.year ? 1 : 0,
       ];
-      await db.runAsync(
+      await dbWrapper.runAsync(
         'UPDATE settings SET active_rows = ? WHERE id = 1',
         [JSON.stringify(activeRows)]
       );
@@ -127,7 +290,7 @@ export default function App() {
   const initDatabase = async () => {
     try {
       // Vytvoření tabulky artworks
-      await db.execAsync(`
+      await dbWrapper.execAsync(`
         CREATE TABLE IF NOT EXISTS artworks (
           id TEXT PRIMARY KEY,
           title TEXT NOT NULL,
@@ -145,7 +308,7 @@ export default function App() {
       `);
 
       // Vytvoření tabulky settings
-      await db.execAsync(`
+      await dbWrapper.execAsync(`
         CREATE TABLE IF NOT EXISTS settings (
           id INTEGER PRIMARY KEY,
           rounds INTEGER NOT NULL,
@@ -158,11 +321,11 @@ export default function App() {
       `);
 
       // Kontrola, zda je databáze artworks prázdná
-      const artworksResult = await db.getAllAsync('SELECT COUNT(*) as count FROM artworks');
+      const artworksResult = await dbWrapper.getAllAsync('SELECT COUNT(*) as count FROM artworks');
       
       if (artworksResult[0].count === 0) {
         // Vložení počátečních dat do artworks
-        await db.runAsync(
+        await dbWrapper.runAsync(
           `INSERT INTO artworks (id, title, title_en, author, author_en, year_start, year_end, picture, textbook, note, note_en, is_active) VALUES 
           ('SA-1', 'Kleobis a Bitón', 'Kleobis and Biton', 'Polymédés z Argu', 'Polymedes of Argos', -580, -580, 'https://raw.githubusercontent.com/4Tomek/art_images/main/images/Sochařství_Antika_Kleobis_and_Biton_Polymedes.jpg', 'Sochařství Antika', 'Dvě archaické mramorové sochy (kúroi) připisované Polymédovi z Argu. Představují bratry, kteří podle legendy zemřeli v naprostém štěstí poté, co vlastními silami dotáhli vůz své matky k chrámu. Delfy, Archeologické muzeum.', 'Two archaic marble statues (kouroi) attributed to Polymedes of Argos. They represent brothers who, according to legend, died in total happiness after pulling their mother''s chariot to the temple themselves. Delphi, Archaeological Museum.', 1),
           ('SA-2', 'Vozataj z Delf', 'Charioteer of Delphi', 'Sotadés z Thespií ?', 'Sotades of Thespiae ?', -478, -474, 'https://raw.githubusercontent.com/4Tomek/art_images/main/images/Sochařství_Antika_Charioteer_of_Delphi_Joy_of_Museums_2.jpg', 'Sochařství Antika', 'Jedna z nejvýznamnějších dochovaných řeckých bronzových soch. Představuje vítěze závodů v Delfách v tzv. přísném stylu. Původně byla součástí většího sousoší s vozem a koňmi. Bronz, výška 180 cm. Delfy, Archeologické muzeum.', 'One of the most important surviving Greek bronze statues. It represents a chariot race winner in Delphi in the so-called Severe style. It was originally part of a larger group with a chariot and horses. Bronze, height 180 cm. Delphi, Archaeological Museum.', 1),
@@ -172,11 +335,11 @@ export default function App() {
       }
 
       // Kontrola, zda je databáze settings prázdná
-      const settingsResult = await db.getAllAsync('SELECT COUNT(*) as count FROM settings');
+      const settingsResult = await dbWrapper.getAllAsync('SELECT COUNT(*) as count FROM settings');
       
       if (settingsResult[0].count === 0) {
         // Vložení výchozích nastavení
-        await db.runAsync(
+        await dbWrapper.runAsync(
           `INSERT INTO settings (id, rounds, rows, active_rows, textbooks, active_textbooks, english) VALUES 
           (1, 3, '["Title","Author","Year"]', '[1,1,1]', '["Sochařství Antika"]', '[1]', 0)`
         );
@@ -196,7 +359,7 @@ export default function App() {
 
   const loadSettings = async () => {
     try {
-      const settings = await db.getAllAsync('SELECT * FROM settings WHERE id = 1');
+      const settings = await dbWrapper.getAllAsync('SELECT * FROM settings WHERE id = 1');
       if (settings.length > 0) {
         const s = settings[0];
         const textbooks = JSON.parse(s.textbooks);
@@ -214,7 +377,7 @@ export default function App() {
         // Načtení artworks po učebnicích
         const artworksByTextbook = {};
         for (const textbook of textbooks) {
-          const artworks = await db.getAllAsync(
+          const artworks = await dbWrapper.getAllAsync(
             'SELECT * FROM artworks WHERE textbook = ?',
             [textbook]
           );
@@ -240,7 +403,7 @@ export default function App() {
         selectedCategories.year ? 1 : 0,
       ];
 
-      await db.runAsync(
+      await dbWrapper.runAsync(
         `UPDATE settings SET 
           rounds = ?, 
           active_rows = ?, 
@@ -253,7 +416,7 @@ export default function App() {
       // Uložení is_active pro artworks
       for (const textbook in tempData.artworksByTextbook) {
         for (const artwork of tempData.artworksByTextbook[textbook]) {
-          await db.runAsync(
+          await dbWrapper.runAsync(
             'UPDATE artworks SET is_active = ? WHERE id = ?',
             [artwork.is_active, artwork.id]
           );
@@ -280,13 +443,13 @@ export default function App() {
               const data = await response.json();
               
               // Načíst aktuální textbooks z settings
-              const settings = await db.getAllAsync('SELECT * FROM settings WHERE id = 1');
+              const settings = await dbWrapper.getAllAsync('SELECT * FROM settings WHERE id = 1');
               let textbooks = JSON.parse(settings[0].textbooks);
               let activeTextbooks = JSON.parse(settings[0].active_textbooks);
               
               for (const item of data) {
                 // Zkontrolovat zda již existuje
-                const existing = await db.getAllAsync(
+                const existing = await dbWrapper.getAllAsync(
                   'SELECT * FROM artworks WHERE id = ?',
                   [item.id]
                 );
@@ -299,7 +462,7 @@ export default function App() {
                   }
                   
                   // Vložit nové dílo
-                  await db.runAsync(
+                  await dbWrapper.runAsync(
                     `INSERT INTO artworks (id, title, title_en, author, author_en, year_start, year_end, picture, textbook, note, note_en, is_active) 
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                     [
@@ -321,7 +484,7 @@ export default function App() {
               }
               
               // Uložit aktualizované textbooks
-              await db.runAsync(
+              await dbWrapper.runAsync(
                 'UPDATE settings SET textbooks = ?, active_textbooks = ? WHERE id = 1',
                 [JSON.stringify(textbooks), JSON.stringify(activeTextbooks)]
               );
@@ -329,7 +492,7 @@ export default function App() {
               await loadSettings();
               
               // Znovu načíst tempSettings s novými učebnicemi
-              const newSettings = await db.getAllAsync('SELECT * FROM settings WHERE id = 1');
+              const newSettings = await dbWrapper.getAllAsync('SELECT * FROM settings WHERE id = 1');
               const s = newSettings[0];
               const newTextbooks = JSON.parse(s.textbooks);
               const newActiveTextbooks = JSON.parse(s.active_textbooks);
@@ -337,7 +500,7 @@ export default function App() {
               // Načíst artworks po učebnicích
               const newArtworksByTextbook = {};
               for (const textbook of newTextbooks) {
-                const artworks = await db.getAllAsync(
+                const artworks = await dbWrapper.getAllAsync(
                   'SELECT * FROM artworks WHERE textbook = ?',
                   [textbook]
                 );
@@ -397,7 +560,7 @@ export default function App() {
                      WHERE is_active = 1 AND textbook IN (${textbookPlaceholders})
                      ORDER BY year_start ASC, title ASC`;
       
-      const result = await db.getAllAsync(query, activeTextbookNames);
+      const result = await dbWrapper.getAllAsync(query, activeTextbookNames);
       
       if (result.length === 0) {
         Alert.alert('Chyba', 'Žádná díla nejsou aktivní. Prosím zapněte alespoň jedno dílo v nastavení.');
@@ -441,7 +604,7 @@ export default function App() {
       
       query += ' ORDER BY RANDOM() LIMIT 1';
       
-      const result = await db.getAllAsync(query, params);
+      const result = await dbWrapper.getAllAsync(query, params);
       
       if (result.length > 0) {
         setImageLoading(true);
